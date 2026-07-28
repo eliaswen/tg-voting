@@ -56,9 +56,8 @@ CREATE TABLE elections (
 
 --
 
-CREATE TABLE voting_codes (
+CREATE TABLE election_voters (
     id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    uuid UUID NOT NULL UNIQUE DEFAULT gen_random_uuid(),
 
     election_id BIGINT NOT NULL
         REFERENCES elections(id)
@@ -68,12 +67,25 @@ CREATE TABLE voting_codes (
         REFERENCES citizens(id)
         ON DELETE RESTRICT,
 
+    database_created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    UNIQUE (election_id, citizen_id)
+);
+
+
+CREATE TABLE voting_codes (
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    uuid UUID NOT NULL UNIQUE DEFAULT gen_random_uuid(),
+
+    election_id BIGINT NOT NULL
+        REFERENCES elections(id)
+        ON DELETE CASCADE,
+
     code_hash TEXT NOT NULL,
 
     database_created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     used_at TIMESTAMPTZ,
 
-    UNIQUE (election_id, citizen_id),
     UNIQUE (election_id, code_hash)
 );
 
