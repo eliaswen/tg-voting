@@ -1,0 +1,26 @@
+<body>
+    <h2>Signing you in…</h2>
+
+    <noscript>You do not have JS enabled. Automatic redirection will not work. Please click <a href="/login/discord/manual-check/$${{request_id}}">here</a> to continue.</noscript>
+
+    <script>
+        const es = new EventSource("/login/discord/status/$${{request_id}}");
+
+        es.addEventListener("redirect", e => {{
+            window.location.href = e.data;
+            es.close();
+        }});
+
+        es.addEventListener("error", e => {{
+            if (e.data === "session-error") {{
+                document.body.innerHTML = "Could not retrieve your session. Please <a href=\"/login\">try again</a>.";
+            }} else if (e.data === "generic-error") {{
+                document.body.innerHTML = "An unexpected error occurred. Please <a href=\"/login\">try again</a>.";
+            }} else if (e.data === "discord-failure") {{
+                document.body.innerHTML = "Discord has rejected your login. Please <a href=\"/login\">try again</a>.";
+            }} else {{
+                document.body.innerHTML = "An unknown error occurred. Please <a href=\"/login\">try again</a>.";
+            }}
+            es.close();
+        }});
+    </script>

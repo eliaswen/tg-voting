@@ -1,5 +1,5 @@
 use axum::response::Html;
 
 pub async fn get_homepage() -> Html<&'static str> {
-    Html("<h1>Hello World</h1>")
+    Html("<h1>Hello World</h1><a href=\"/login\">Login</a>")
 }

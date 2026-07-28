@@ -5,15 +5,18 @@ use tracing::{info, error, warn, trace, debug};
 use version::get_version;
 use axum::{
     routing::get,
-    Router
+    Router,
 };
-use sqlx::postgres::PgPool;
+use std::sync::{Arc, Mutex};
+use std::collections::HashMap;
+
+
 
 mod pages;
 mod error_handling;
-use pages::{get_homepage, get_debug, post_debug};
+use pages::login::AppState;
+use pages::{get_homepage, get_debug, post_debug, get_login, get_login_discord, get_login_discord_callback, get_login_discord_complete, get_login_discord_manual_check, get_login_discord_status, get_login_reddit, get_userinfo, login_threads};
 use error_handling::{error_method, error_not_found};
-
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -58,10 +61,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
 
-
-
-
-
     let database_url = get_database_url()?;
 
     let pool = match sqlx::PgPool::connect(&database_url).await {
@@ -86,19 +85,47 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
 
-    let router = build_router(&pool).await;
+    let (discord_id, discord_secret, public_host) = match get_oauth_info() {
+        Ok(info) => info,
+        Err(e) => {
+            error!("Failed to get OAuth info: {e}");
+            return Err(e);
+        }
+    };
+
+    let state = AppState {
+        pool,
+        pending_logins: Arc::new(Mutex::new(HashMap::new())),
+        discord_id,
+        discord_secret,
+        public_host,
+        http_client: reqwest::Client::new(),
+    };
+
+    let router = build_router(state.clone()).await;
+
+    trace!("Starting background tasks...");
+    tokio::spawn(login_threads(state));
 
     axum::serve(listener, router).await.unwrap();
 
     Ok(())
 }
 
-async fn build_router(pool: &PgPool) -> Router {
+async fn build_router(state: AppState) -> Router {
     Router::new()
         .route("/", get(get_homepage))
+        .route("/login", get(get_login))
+        .route("/login/discord", get(get_login_discord))
+        .route("/login/discord/callback", get(get_login_discord_callback))
+        .route("/login/discord/status/{request_id}", get(get_login_discord_status))
+        .route("/login/discord/manual-check/{request_id}", get(get_login_discord_manual_check))
+        .route("/login/discord/complete/{request_id}", get(get_login_discord_complete))
+        .route("/login/reddit", get(get_login_reddit))
+        .route("/userinfo", get(get_userinfo))
         .route("/debug/{path}", get(get_debug).post(post_debug))
         .fallback(error_not_found)
-        .with_state(pool.clone())
+        .with_state(state)
 }
 
 fn get_database_url() -> Result<String, Box<dyn std::error::Error>> {
@@ -152,4 +179,39 @@ fn get_database_url() -> Result<String, Box<dyn std::error::Error>> {
 
 
     Ok(database_url)
+}
+
+fn get_oauth_info() -> Result<(String, String, String), Box<dyn std::error::Error>> {
+
+    let discord_id = match env::var("DISCORD_CLIENT_ID") {
+        Ok(id) => id,
+        Err(e) => {
+            error!("DISCORD_CLIENT_ID is not set.");
+            return Err(e.into());
+        }
+    };
+
+    debug!("Discord Client ID: {}", discord_id);
+
+    let discord_secret = match env::var("DISCORD_CLIENT_SECRET") {
+        Ok(secret) => secret,
+        Err(e) => {
+            error!("DISCORD_CLIENT_SECRET is not set.");
+            return Err(e.into());
+        }
+    };
+
+    trace!("Discord Client secret read.");
+
+    let public_host = match env::var("PUBLIC_HOST") {
+        Ok(host) => host,
+        Err(e) => {
+            error!("PUBLIC_HOST is not set.");
+            return Err(e.into());
+        }
+    };
+
+    debug!("Public host: {public_host}");
+
+    Ok((discord_id, discord_secret, public_host))
 }

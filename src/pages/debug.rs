@@ -3,9 +3,10 @@ use axum::{
     response::{Html, IntoResponse},
 };
 use serde::Deserialize;
-use sqlx::postgres::PgPool;
+use sqlx::{postgres::PgPool, Row};
 use tracing::error;
 use crate::{error_method, error_not_found};
+use crate::pages::login::AppState;
 
 #[derive(Deserialize)]
 pub struct SqlQueryForm {
@@ -13,7 +14,7 @@ pub struct SqlQueryForm {
 }
 
 async fn list_tables(pool: &PgPool) -> Html<String> {
-    let query = sqlx::query!(
+    let query = sqlx::query(
         "SELECT schemaname, tablename FROM pg_tables ORDER BY schemaname, tablename;"
     )
     .fetch_all(pool)
@@ -23,8 +24,8 @@ async fn list_tables(pool: &PgPool) -> Html<String> {
         Ok(rows) => {
             let mut html = "<ul>".to_string();
             for row in rows {
-                let schema = row.schemaname.as_deref().unwrap_or("");
-                let table = row.tablename.as_deref().unwrap_or("");
+                let schema: &str = row.try_get("schemaname").unwrap_or("");
+                let table: &str = row.try_get("tablename").unwrap_or("");
                 html.push_str(&format!("<li>{} - {}</li>", schema, table));
             }
             html.push_str("</ul>");
@@ -74,12 +75,13 @@ async fn post_sql_query(pool: &PgPool, content: String) -> Html<String> {
 }
 
 pub async fn get_debug(
-    State(pool): State<PgPool>,
+    State(state): State<AppState>,
     Path(path): Path<String>,
 ) -> impl IntoResponse {
     match path.as_str() {
         "sql" => get_sql_query().into_response(),
-        "tables" => list_tables(&pool).await.into_response(),
+        "tables" => list_tables(&state.pool).await.into_response(),
+        "login-threads" => get_login_threads_debug(state).await.into_response(),
         _ => error_not_found().await.into_response(),
     }
 }
@@ -92,6 +94,15 @@ pub async fn post_debug(
     match path.as_str() {
         "sql" => post_sql_query(&pool, form.query).await.into_response(),
         "tables" => error_method().await.into_response(),
+        "login-threads" => error_method().await.into_response(),
         _ => error_not_found().await.into_response(),
     }
+}
+
+async fn get_login_threads_debug(state: AppState) -> Html<String> {
+    let pending_logins = state.pending_logins.lock().unwrap();
+    Html(format!(
+        "<h1>Login Threads</h1>
+        <p>Uncatched logins: {pending_logins:?}</p>",
+    ))
 }
