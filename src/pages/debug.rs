@@ -1,12 +1,12 @@
+use crate::pages::login::AppState;
+use crate::{error_method, error_not_found};
 use axum::{
     extract::{Form, Path, State},
     response::{Html, IntoResponse},
 };
 use serde::Deserialize;
-use sqlx::{postgres::PgPool, Row};
+use sqlx::{Row, postgres::PgPool};
 use tracing::error;
-use crate::{error_method, error_not_found};
-use crate::pages::login::AppState;
 
 #[derive(Deserialize)]
 pub struct SqlQueryForm {
@@ -14,11 +14,10 @@ pub struct SqlQueryForm {
 }
 
 async fn list_tables(pool: &PgPool) -> Html<String> {
-    let query = sqlx::query(
-        "SELECT schemaname, tablename FROM pg_tables ORDER BY schemaname, tablename;"
-    )
-    .fetch_all(pool)
-    .await;
+    let query =
+        sqlx::query("SELECT schemaname, tablename FROM pg_tables ORDER BY schemaname, tablename;")
+            .fetch_all(pool)
+            .await;
 
     match query {
         Ok(rows) => {
@@ -38,7 +37,6 @@ async fn list_tables(pool: &PgPool) -> Html<String> {
     }
 }
 
-
 fn get_sql_query() -> Html<String> {
     Html(
         "<form method='POST' action='/debug/sql'>
@@ -50,8 +48,9 @@ fn get_sql_query() -> Html<String> {
 }
 
 async fn post_sql_query(pool: &PgPool, content: String) -> Html<String> {
-    
-    let result = sqlx::query(sqlx::AssertSqlSafe(content.as_str())).fetch_all(pool).await;
+    let result = sqlx::query(sqlx::AssertSqlSafe(content.as_str()))
+        .fetch_all(pool)
+        .await;
 
     match result {
         Ok(result) => Html(format!(
@@ -62,15 +61,20 @@ async fn post_sql_query(pool: &PgPool, content: String) -> Html<String> {
             <br>
             
             <ul>{}</ul>",
-            result.iter().map(|row| format!("<li>{:?}</li>", row)).collect::<String>()
+            result
+                .iter()
+                .map(|row| format!("<li>{:?}</li>", row))
+                .collect::<String>()
         )),
-        Err(error) => Html(format!("
+        Err(error) => Html(format!(
+            "
         <form method='POST' action='/debug/sql'>
             <input type='text' name='query'>
             <button type='submit'>Submit</button>
             </form>
             <br>
-        SQL error: {error}")),
+        SQL error: {error}"
+        )),
     }
 }
 
