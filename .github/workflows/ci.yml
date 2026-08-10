@@ -1,0 +1,244 @@
+name: CI and release
+
+on:
+  push:
+    branches:
+      - master
+
+  pull_request:
+    branches:
+      - master
+
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  DATABASE_URL: postgres://postgres:postgres@localhost:5432/tg_voting
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: tg_voting
+
+        ports:
+          - 5432:5432
+
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Run Clippy
+        run: cargo clippy --locked --all-targets -- -D warnings
+
+      - name: Run tests
+        run: cargo test --locked --all-targets --verbose
+
+
+  release_metadata:
+    name: Detect release commit
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+    outputs:
+      is_release: ${{ steps.release_commit.outputs.is_release }}
+      version: ${{ steps.release_commit.outputs.version }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Detect release commit
+        id: release_commit
+        shell: bash
+        run: |
+          subject="$(git log -1 --pretty=%s)"
+
+          echo "is_release=false" >> "$GITHUB_OUTPUT"
+          echo "version=" >> "$GITHUB_OUTPUT"
+
+          if [[ "$subject" =~ ^Release\ ([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+            echo "is_release=true" >> "$GITHUB_OUTPUT"
+            echo "version=${BASH_REMATCH[1]}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Verify Cargo version
+        if: steps.release_commit.outputs.is_release == 'true'
+        env:
+          RELEASE_VERSION: ${{ steps.release_commit.outputs.version }}
+        shell: bash
+        run: |
+          cargo_version="$(
+            sed -nE 's/^version = "([^"]+)"/\1/p' Cargo.toml \
+              | head -n 1
+          )"
+
+          if [[ "$cargo_version" != "$RELEASE_VERSION" ]]; then
+            echo "::error::Release commit says ${RELEASE_VERSION}, but Cargo.toml says ${cargo_version}"
+            echo
+            echo "Update Cargo.toml first:"
+            echo
+            echo "  version = \"${RELEASE_VERSION}\""
+            exit 1
+          fi
+
+container:
+  name: Build and publish container
+
+  needs:
+    - test
+    - release_metadata
+
+  if: github.event_name == 'push'
+  runs-on: ubuntu-latest
+
+  permissions:
+    contents: read
+    packages: write
+
+  steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Log in to GitHub Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Extract container metadata
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ghcr.io/${{ github.repository }}
+        tags: |
+          type=raw,value=dev
+          type=raw,value=${{ needs.release_metadata.outputs.version }},enable=${{ needs.release_metadata.outputs.is_release == 'true' }}
+          type=raw,value=latest,enable=${{ needs.release_metadata.outputs.is_release == 'true' }}
+
+    - name: Build and push
+      uses: docker/build-push-action@v6
+      with:
+        context: .
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+
+  release:
+    name: Create GitHub release
+
+    needs:
+      - release_metadata
+      - container
+
+    if: >
+      success() &&
+      needs.release_metadata.outputs.is_release == 'true'
+
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout complete history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Generate linked release notes
+        env:
+          SERVER_URL: ${{ github.server_url }}
+          REPOSITORY: ${{ github.repository }}
+        shell: bash
+        run: |
+          previous_tag="$(
+            git tag \
+              --merged HEAD^ \
+              --sort=-version:refname \
+              | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' \
+              | head -n 1 || true
+          )"
+
+          if [[ -n "$previous_tag" ]]; then
+            range="${previous_tag}..HEAD"
+            heading="## Commits since ${previous_tag}"
+          else
+            range="HEAD"
+            heading="## Commits"
+          fi
+
+          echo "$heading" > release-notes.md
+          echo >> release-notes.md
+
+          while IFS=$'\t' read -r sha subject; do
+            short_sha="${sha:0:7}"
+
+            printf -- '- [`%s`](%s/%s/commit/%s) %s\n' \
+              "$short_sha" \
+              "$SERVER_URL" \
+              "$REPOSITORY" \
+              "$sha" \
+              "$subject"
+
+          done < <(
+            git log \
+              --reverse \
+              --pretty=tformat:'%H%x09%s' \
+              "$range"
+          ) >> release-notes.md
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.release_metadata.outputs.version }}
+        shell: bash
+        run: |
+          if gh release view "$VERSION" >/dev/null 2>&1; then
+            echo "Release $VERSION already exists."
+            exit 0
+          fi
+
+          gh release create "$VERSION" \
+            --target "$GITHUB_SHA" \
+            --title "Release $VERSION" \
+            --notes-file release-notes.md
