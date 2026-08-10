@@ -7,12 +7,13 @@ use axum::{
 use axum_extra::extract::cookie::CookieJar;
 use serde::Deserialize;
 use sqlx::{Postgres, Row, Transaction};
-use tracing::error;
+use tracing::{debug, error, info, trace, warn};
 
 use crate::pages::auth::{
     AuthenticatedCitizen, ELECTION_MINISTER, SUPERADMIN, html_escape, require_citizen,
 };
 use crate::pages::login::AppState;
+use crate::render::render_page;
 
 #[derive(Deserialize)]
 pub struct CandidateForm {
@@ -37,11 +38,72 @@ pub struct CandidateForm {
     message_5: String,
 }
 
+struct CandidateRegistrationPage {
+    show_form: bool,
+    show_status: bool,
+    show_withdrawal: bool,
+    status_message: String,
+    position: Option<String>,
+    display_name: String,
+    party: String,
+    vice_president_options: String,
+    vice_president_name: String,
+    vice_president_party: String,
+    messages: Vec<String>,
+}
+
+impl CandidateRegistrationPage {
+    fn new() -> Self {
+        Self {
+            show_form: false,
+            show_status: false,
+            show_withdrawal: false,
+            status_message: String::new(),
+            position: None,
+            display_name: String::new(),
+            party: String::new(),
+            vice_president_options: String::new(),
+            vice_president_name: String::new(),
+            vice_president_party: String::new(),
+            messages: vec![String::new(); 5],
+        }
+    }
+
+    fn show_status(&mut self, message: String, show_withdrawal: bool) {
+        self.show_status = true;
+        self.show_withdrawal = show_withdrawal;
+        self.status_message = html_escape(&message);
+    }
+
+    fn show_form(
+        &mut self,
+        position: Option<&str>,
+        display_name: &str,
+        party: &str,
+        vice_president_options: String,
+        vice_president_name: &str,
+        vice_president_party: &str,
+        messages: Vec<String>,
+        show_withdrawal: bool,
+    ) {
+        self.show_form = true;
+        self.show_withdrawal = show_withdrawal;
+        self.position = position.map(str::to_string);
+        self.display_name = html_escape(display_name);
+        self.party = html_escape(party);
+        self.vice_president_options = vice_president_options;
+        self.vice_president_name = html_escape(vice_president_name);
+        self.vice_president_party = html_escape(vice_president_party);
+        self.messages = messages;
+    }
+}
+
 pub async fn get_candidate_registration(
     State(state): State<AppState>,
     jar: CookieJar,
     Path(election_uuid): Path<uuid::Uuid>,
 ) -> Response {
+    trace!(%election_uuid, "Handling candidate registration page request");
     let citizen = match require_citizen(&state, &jar).await {
         Ok(citizen) => citizen,
         Err(response) => return response,
@@ -53,6 +115,7 @@ pub async fn get_candidate_registration(
     };
     let election_id: i64 = election.get("id");
     let registration_open: bool = election.get("registration_open");
+    debug!(%election_uuid, election_id, citizen_id = citizen.id, registration_open, "Loaded candidate registration context");
 
     let candidate = match sqlx::query(
         "SELECT id, position::text AS position, election_display_name, party, status::text AS status
@@ -62,37 +125,43 @@ pub async fn get_candidate_registration(
     .bind(citizen.id)
     .fetch_optional(&state.pool)
     .await {
-        Ok(candidate) => candidate,
+        Ok(candidate) => {
+            debug!(%election_uuid, citizen_id = citizen.id, registration_found = candidate.is_some(), "Retrieved citizen candidate registration");
+            candidate
+        }
         Err(error) => return database_error(error),
     };
 
-    let body = match candidate {
+    let mut page = CandidateRegistrationPage::new();
+    match candidate {
         None if registration_open => {
+            trace!(%election_uuid, citizen_id = citizen.id, "Rendering new candidate registration form");
             let options = match vp_options(&state, election_id, citizen.id, None).await {
                 Ok(options) => options,
                 Err(response) => return response,
             };
-            registration_form(
-                election_uuid,
+            page.show_form(
                 None,
                 &citizen.display_name,
                 "",
-                &options,
+                options,
                 "",
                 "",
-                &[
-                    String::new(),
-                    String::new(),
-                    String::new(),
-                    String::new(),
-                    String::new(),
-                ],
+                vec![String::new(); 5],
+                false,
+            );
+        }
+        None => {
+            trace!(%election_uuid, citizen_id = citizen.id, "Rendering closed candidate registration state");
+            page.show_status(
+                "Candidate registration is not currently open.".to_string(),
+                false,
             )
         }
-        None => "<p>Candidate registration is not currently open.</p>".to_string(),
         Some(candidate) => {
             let position: String = candidate.get("position");
             let status: String = candidate.get("status");
+            debug!(%election_uuid, citizen_id = citizen.id, %position, %status, "Rendering existing candidate registration");
             if position == "vice_president" {
                 let ticket = match sqlx::query(
                     "SELECT presidential_tickets.status::text AS status,
@@ -111,36 +180,25 @@ pub async fn get_candidate_registration(
                     Ok(None) => return not_found(),
                     Err(error) => return database_error(error),
                 };
-                format!(
-                    "<p>You are registered as {}'s vice president under the name {}. Ticket status: {}.</p>{}",
-                    html_escape(ticket.get("president_name")),
-                    html_escape(ticket.get("vice_president_name")),
-                    html_escape(ticket.get("status")),
-                    withdrawal_form(election_uuid),
-                )
+                page.show_status(format!("You are registered as {}'s vice president under the name {}. Ticket status: {}.", ticket.get::<String, _>("president_name"), ticket.get::<String, _>("vice_president_name"), ticket.get::<String, _>("status")), true);
             } else if status != "active" {
-                format!(
-                    "<p>Your {} registration is {} and can no longer be edited.</p>",
-                    html_escape(&position),
-                    html_escape(&status),
-                )
+                page.show_status(
+                    format!(
+                        "Your {position} registration is {status} and can no longer be edited."
+                    ),
+                    false,
+                );
             } else if position == "council" && registration_open {
-                registration_form(
-                    election_uuid,
+                page.show_form(
                     Some("council"),
                     candidate.get("election_display_name"),
                     candidate.get("party"),
+                    String::new(),
                     "",
                     "",
-                    "",
-                    &[
-                        String::new(),
-                        String::new(),
-                        String::new(),
-                        String::new(),
-                        String::new(),
-                    ],
-                ) + &withdrawal_form(election_uuid)
+                    vec![String::new(); 5],
+                    true,
+                );
             } else if position == "president" {
                 let ticket = match sqlx::query(
                     "SELECT presidential_tickets.id, presidential_tickets.status::text AS status,
@@ -160,10 +218,7 @@ pub async fn get_candidate_registration(
                 };
                 let ticket_status: String = ticket.get("status");
                 if ticket_status != "active" {
-                    format!(
-                        "<p>Your presidential ticket is {} and can no longer be edited.</p>",
-                        html_escape(&ticket_status),
-                    )
+                    page.show_status(format!("Your presidential ticket is {ticket_status} and can no longer be edited."), false);
                 } else if registration_open {
                     let current_vp: i64 = ticket.get("vice_president_citizen_id");
                     let options =
@@ -175,50 +230,71 @@ pub async fn get_candidate_registration(
                         Ok(messages) => messages,
                         Err(response) => return response,
                     };
-                    registration_form(
-                        election_uuid,
+                    page.show_form(
                         Some("president"),
                         candidate.get("election_display_name"),
                         candidate.get("party"),
-                        &options,
+                        options,
                         ticket.get("vice_president_name"),
                         ticket.get("vice_president_party"),
-                        &messages,
-                    ) + &withdrawal_form(election_uuid)
+                        messages,
+                        true,
+                    );
                 } else {
-                    format!(
-                        "<p>Your presidential ticket is active, but candidate registration is closed.</p>{}",
-                        withdrawal_form(election_uuid),
-                    )
+                    page.show_status(
+                        "Your presidential ticket is active, but candidate registration is closed."
+                            .to_string(),
+                        true,
+                    );
                 }
             } else {
-                format!(
-                    "<p>Your {} registration is active, but candidate registration is closed.</p>{}",
-                    html_escape(&position),
-                    withdrawal_form(election_uuid),
-                )
+                page.show_status(format!("Your {position} registration is active, but candidate registration is closed."), true);
             }
         }
-    };
+    }
 
-    let management_link = if citizen.role & (ELECTION_MINISTER | SUPERADMIN) != 0 {
-        format!(
-            "<p><a href=\"/manage/elections/{}/status\">Manage election status and candidates</a></p>",
-            election_uuid,
-        )
-    } else {
-        String::new()
-    };
-
-    Html(format!(
-        "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><title>Candidate registration</title></head><body>
-        <h1>{} candidate registration</h1>{}<p><a href=\"/elections/{}/candidates\">View candidates</a></p>{}</body></html>",
-        html_escape(election.get("name")),
-        body,
-        election_uuid,
-        management_link,
+    let position = page.position.as_deref().unwrap_or_default();
+    let content = include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/static/candidates/registration.html"
     ))
-    .into_response()
+    .replace("$${{election_name}}", &html_escape(election.get("name")))
+    .replace("$${{election_uuid}}", &election_uuid.to_string())
+    .replace("$${{status_hidden}}", hidden(page.show_status))
+    .replace("$${{status_message}}", &page.status_message)
+    .replace("$${{form_hidden}}", hidden(page.show_form))
+    .replace(
+        "$${{position_select_hidden}}",
+        hidden(page.show_form && page.position.is_none()),
+    )
+    .replace(
+        "$${{position_fixed_hidden}}",
+        hidden(page.show_form && page.position.is_some()),
+    )
+    .replace(
+        "$${{position_select_disabled}}",
+        disabled(page.show_form && page.position.is_none()),
+    )
+    .replace(
+        "$${{position_fixed_disabled}}",
+        disabled(page.show_form && page.position.is_some()),
+    )
+    .replace("$${{position}}", position)
+    .replace("$${{display_name}}", &page.display_name)
+    .replace("$${{party}}", &page.party)
+    .replace("$${{vice_president_options}}", &page.vice_president_options)
+    .replace("$${{vice_president_name}}", &page.vice_president_name)
+    .replace("$${{vice_president_party}}", &page.vice_president_party)
+    .replace("$${{message_fields}}", &message_fields(&page.messages))
+    .replace("$${{withdrawal_hidden}}", hidden(page.show_withdrawal))
+    .replace(
+        "$${{management_hidden}}",
+        hidden(citizen.role & (ELECTION_MINISTER | SUPERADMIN) != 0),
+    );
+    trace!(%election_uuid, citizen_id = citizen.id, show_form = page.show_form, show_status = page.show_status, "Rendering candidate registration page");
+    render_page(&content, "Candidate registration", jar, &state.pool)
+        .await
+        .into_response()
 }
 
 pub async fn post_candidate_registration(
@@ -227,16 +303,21 @@ pub async fn post_candidate_registration(
     Path(election_uuid): Path<uuid::Uuid>,
     Form(form): Form<CandidateForm>,
 ) -> Response {
+    trace!(%election_uuid, position = %form.position, "Handling candidate registration update");
     let citizen = match require_citizen(&state, &jar).await {
         Ok(citizen) => citizen,
         Err(response) => return response,
     };
     if let Err(message) = validate_candidate_form(&form) {
+        warn!(%election_uuid, citizen_id = citizen.id, position = %form.position, validation_error = message, "Rejected invalid candidate registration");
         return bad_request(message);
     }
 
     let mut transaction = match state.pool.begin().await {
-        Ok(transaction) => transaction,
+        Ok(transaction) => {
+            trace!(%election_uuid, citizen_id = citizen.id, "Started candidate registration transaction");
+            transaction
+        }
         Err(error) => return database_error(error),
     };
     let election = sqlx::query(
@@ -249,8 +330,14 @@ pub async fn post_candidate_registration(
     .await;
     let election = match election {
         Ok(Some(election)) if election.get::<bool, _>("registration_open") => election,
-        Ok(Some(_)) => return bad_request("Candidate registration is not currently open."),
-        Ok(None) => return not_found(),
+        Ok(Some(_)) => {
+            warn!(%election_uuid, citizen_id = citizen.id, "Rejected candidate update outside registration period");
+            return bad_request("Candidate registration is not currently open.");
+        }
+        Ok(None) => {
+            debug!(%election_uuid, "Candidate registration election was not found");
+            return not_found();
+        }
         Err(error) => return database_error(error),
     };
     let election_id: i64 = election.get("id");
@@ -263,27 +350,36 @@ pub async fn post_candidate_registration(
     .fetch_optional(&mut *transaction)
     .await;
     let existing = match existing {
-        Ok(existing) => existing,
+        Ok(existing) => {
+            debug!(%election_uuid, election_id, citizen_id = citizen.id, existing_registration = existing.is_some(), "Loaded existing candidate registration for update");
+            existing
+        }
         Err(error) => return database_error(error),
     };
 
     let result = match existing {
         Some(existing) if existing.get::<String, _>("status") != "active" => {
+            warn!(%election_uuid, citizen_id = citizen.id, "Rejected edit of inactive candidate registration");
             return bad_request("A withdrawn or invalidated registration cannot be edited.");
         }
         Some(existing) if existing.get::<String, _>("position") != form.position => {
+            warn!(%election_uuid, citizen_id = citizen.id, current_position = %existing.get::<String, _>("position"), requested_position = %form.position, "Rejected candidate role change");
             return bad_request("A candidate cannot change roles after registering.");
         }
         Some(existing) if form.position == "council" => {
-            sqlx::query("UPDATE candidates SET election_display_name = $1, party = $2 WHERE id = $3")
-                .bind(form.election_display_name.trim())
-                .bind(form.party.trim())
-                .bind(existing.get::<i64, _>("id"))
-                .execute(&mut *transaction)
-                .await
-                .map(|_| ())
+            debug!(%election_uuid, citizen_id = citizen.id, "Updating council candidate registration");
+            sqlx::query(
+                "UPDATE candidates SET election_display_name = $1, party = $2 WHERE id = $3",
+            )
+            .bind(form.election_display_name.trim())
+            .bind(form.party.trim())
+            .bind(existing.get::<i64, _>("id"))
+            .execute(&mut *transaction)
+            .await
+            .map(|_| ())
         }
         Some(existing) if form.position == "president" => {
+            debug!(%election_uuid, citizen_id = citizen.id, "Updating presidential ticket registration");
             update_presidential_registration(
                 &mut transaction,
                 election_id,
@@ -293,8 +389,12 @@ pub async fn post_candidate_registration(
             )
             .await
         }
-        Some(_) => return bad_request("Vice presidents cannot edit the presidential form."),
+        Some(_) => {
+            warn!(%election_uuid, citizen_id = citizen.id, "Rejected vice president form edit");
+            return bad_request("Vice presidents cannot edit the presidential form.");
+        }
         None if form.position == "council" => {
+            debug!(%election_uuid, citizen_id = citizen.id, "Creating council candidate registration");
             sqlx::query(
                 "INSERT INTO candidates (election_id, citizen_id, position, election_display_name, party)
                  VALUES ($1, $2, 'council', $3, $4)",
@@ -307,13 +407,10 @@ pub async fn post_candidate_registration(
             .await
             .map(|_| ())
         }
-        None => create_presidential_registration(
-            &mut transaction,
-            election_id,
-            citizen.id,
-            &form,
-        )
-        .await,
+        None => {
+            debug!(%election_uuid, citizen_id = citizen.id, "Creating presidential ticket registration");
+            create_presidential_registration(&mut transaction, election_id, citizen.id, &form).await
+        }
     };
     if let Err(error) = result {
         return candidate_database_error(error);
@@ -321,6 +418,7 @@ pub async fn post_candidate_registration(
     if let Err(error) = transaction.commit().await {
         return database_error(error);
     }
+    info!(%election_uuid, election_id, citizen_id = citizen.id, position = %form.position, "Saved candidate registration");
     Redirect::to(&format!("/elections/{election_uuid}/register")).into_response()
 }
 
@@ -329,12 +427,16 @@ pub async fn post_withdraw_candidate(
     jar: CookieJar,
     Path(election_uuid): Path<uuid::Uuid>,
 ) -> Response {
+    trace!(%election_uuid, "Handling candidate withdrawal");
     let citizen = match require_citizen(&state, &jar).await {
         Ok(citizen) => citizen,
         Err(response) => return response,
     };
     let mut transaction = match state.pool.begin().await {
-        Ok(transaction) => transaction,
+        Ok(transaction) => {
+            trace!(%election_uuid, citizen_id = citizen.id, "Started candidate withdrawal transaction");
+            transaction
+        }
         Err(error) => return database_error(error),
     };
     let candidate = sqlx::query(
@@ -350,10 +452,14 @@ pub async fn post_withdraw_candidate(
     .await;
     let candidate = match candidate {
         Ok(Some(candidate)) => candidate,
-        Ok(None) => return not_found(),
+        Ok(None) => {
+            debug!(%election_uuid, citizen_id = citizen.id, "Candidate withdrawal target was not found");
+            return not_found();
+        }
         Err(error) => return database_error(error),
     };
     let position: String = candidate.get("position");
+    debug!(%election_uuid, citizen_id = citizen.id, %position, "Loaded candidate withdrawal target");
     let (target_type, target_uuid, previous) = if position == "council" {
         let previous: String = candidate.get("status");
         if previous == "withdrawn" {
@@ -423,20 +529,26 @@ pub async fn post_withdraw_candidate(
     if let Err(error) = transaction.commit().await {
         return database_error(error);
     }
+    info!(%election_uuid, citizen_id = citizen.id, target_type, %target_uuid, "Withdrew candidate registration");
     Redirect::to(&format!("/elections/{election_uuid}/register")).into_response()
 }
 
 pub async fn get_election_candidates(
     State(state): State<AppState>,
+    jar: CookieJar,
     Path(election_uuid): Path<uuid::Uuid>,
 ) -> Response {
+    trace!(%election_uuid, "Handling public election candidates request");
     let election = match sqlx::query("SELECT id, name FROM elections WHERE uuid = $1")
         .bind(election_uuid)
         .fetch_optional(&state.pool)
         .await
     {
         Ok(Some(election)) => election,
-        Ok(None) => return not_found(),
+        Ok(None) => {
+            debug!(%election_uuid, "Public candidates election was not found");
+            return not_found();
+        }
         Err(error) => return database_error(error),
     };
     let election_id: i64 = election.get("id");
@@ -454,7 +566,10 @@ pub async fn get_election_candidates(
     .bind(election_id)
     .fetch_all(&state.pool)
     .await {
-        Ok(tickets) => tickets,
+        Ok(tickets) => {
+            debug!(%election_uuid, election_id, ticket_count = tickets.len(), "Retrieved active presidential tickets");
+            tickets
+        }
         Err(error) => return database_error(error),
     };
     let mut presidential = String::new();
@@ -466,24 +581,47 @@ pub async fn get_election_candidates(
         let messages = messages
             .iter()
             .filter(|message| !message.is_empty())
-            .map(|message| format!("<li>{}</li>", html_escape(message)))
+            .map(|message| {
+                include_str!(concat!(
+                    env!("CARGO_MANIFEST_DIR"),
+                    "/static/candidates/ticket-message.html"
+                ))
+                .replace("$${{message}}", &html_escape(message))
+            })
             .collect::<String>();
-        presidential.push_str(&format!(
-            "<li>{} ({}) with {} ({}){}</li>",
-            html_escape(ticket.get("president_name")),
-            html_escape(ticket.get("president_party")),
-            html_escape(ticket.get("vice_president_name")),
-            html_escape(ticket.get("vice_president_party")),
-            if messages.is_empty() {
-                String::new()
-            } else {
-                format!("<ul>{messages}</ul>")
-            },
-        ));
+        presidential.push_str(
+            &include_str!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/static/candidates/presidential-ticket.html"
+            ))
+            .replace(
+                "$${{president_name}}",
+                &html_escape(ticket.get("president_name")),
+            )
+            .replace(
+                "$${{president_party}}",
+                &html_escape(ticket.get("president_party")),
+            )
+            .replace(
+                "$${{vice_president_name}}",
+                &html_escape(ticket.get("vice_president_name")),
+            )
+            .replace(
+                "$${{vice_president_party}}",
+                &html_escape(ticket.get("vice_president_party")),
+            )
+            .replace(
+                "$${{messages_hidden}}",
+                if messages.is_empty() { "hidden" } else { "" },
+            )
+            .replace("$${{messages}}", &messages),
+        );
     }
-    if presidential.is_empty() {
-        presidential.push_str("<li>No presidential tickets are currently registered.</li>");
-    }
+    let presidential_empty_hidden = if presidential.is_empty() {
+        ""
+    } else {
+        "hidden"
+    };
     let council = match sqlx::query(
         "SELECT election_display_name, party FROM candidates
          WHERE election_id = $1 AND position = 'council' AND status = 'active'
@@ -493,38 +631,52 @@ pub async fn get_election_candidates(
     .fetch_all(&state.pool)
     .await
     {
-        Ok(council) => council,
+        Ok(council) => {
+            debug!(%election_uuid, election_id, candidate_count = council.len(), "Retrieved active council candidates");
+            council
+        }
         Err(error) => return database_error(error),
     };
     let mut council_items = String::new();
     for candidate in council {
-        council_items.push_str(&format!(
-            "<li>{} ({})</li>",
-            html_escape(candidate.get("election_display_name")),
-            html_escape(candidate.get("party")),
-        ));
+        council_items.push_str(
+            &include_str!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/static/candidates/council-candidate.html"
+            ))
+            .replace(
+                "$${{name}}",
+                &html_escape(candidate.get("election_display_name")),
+            )
+            .replace("$${{party}}", &html_escape(candidate.get("party"))),
+        );
     }
-    if council_items.is_empty() {
-        council_items.push_str("<li>No council candidates are currently registered.</li>");
-    }
-    Html(format!(
-        "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><title>Candidates</title></head><body>
-        <h1>{} candidates</h1><h2>President</h2><ul>{}</ul><h2>Council</h2><ul>{}</ul>
-        <p><a href=\"/elections/{}/register\">Register or manage my candidacy</a></p>
-        <p><a href=\"/elections/{}/changes\">Election change log</a></p></body></html>",
-        html_escape(election.get("name")),
-        presidential,
-        council_items,
-        election_uuid,
-        election_uuid,
+    let council_empty_hidden = if council_items.is_empty() {
+        ""
+    } else {
+        "hidden"
+    };
+    let content = include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/static/candidates/candidates.html"
     ))
-    .into_response()
+    .replace("$${{election_name}}", &html_escape(election.get("name")))
+    .replace("$${{presidential_candidates}}", &presidential)
+    .replace("$${{council_candidates}}", &council_items)
+    .replace("$${{presidential_empty_hidden}}", presidential_empty_hidden)
+    .replace("$${{council_empty_hidden}}", council_empty_hidden)
+    .replace("$${{election_uuid}}", &election_uuid.to_string());
+    trace!(%election_uuid, "Rendering public election candidates page");
+    render_page(&content, "Candidates", jar, &state.pool)
+        .await
+        .into_response()
 }
 
 async fn election_registration_state(
     state: &AppState,
     election_uuid: uuid::Uuid,
 ) -> Result<Option<sqlx::postgres::PgRow>, Response> {
+    trace!(%election_uuid, "Retrieving election registration state");
     sqlx::query(
         "SELECT id, name, status::text AS status,
                 status = 'registration' AS registration_open
@@ -542,6 +694,10 @@ async fn vp_options(
     president_citizen_id: i64,
     current_vp: Option<i64>,
 ) -> Result<String, Response> {
+    trace!(
+        election_id,
+        president_citizen_id, current_vp, "Retrieving eligible vice presidents"
+    );
     let citizens = sqlx::query(
         "SELECT citizens.id,
                 COALESCE(NULLIF(authentik_identities.display_name, ''),
@@ -562,70 +718,62 @@ async fn vp_options(
     .fetch_all(&state.pool)
     .await
     .map_err(database_error)?;
-    let mut options = String::from("<option value=\"\">Select a vice president</option>");
+    debug!(
+        election_id,
+        citizen_count = citizens.len(),
+        "Retrieved eligible vice presidents"
+    );
+    let mut options = String::new();
     for citizen in citizens {
         let id: i64 = citizen.get("id");
-        options.push_str(&format!(
-            "<option value=\"{}\"{}>{}</option>",
-            id,
-            if Some(id) == current_vp {
-                " selected"
-            } else {
-                ""
-            },
-            html_escape(citizen.get("display_name")),
-        ));
+        options.push_str(
+            &include_str!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/static/candidates/vice-president-option.html"
+            ))
+            .replace("$${{citizen_id}}", &id.to_string())
+            .replace(
+                "$${{selected}}",
+                if Some(id) == current_vp {
+                    "selected"
+                } else {
+                    ""
+                },
+            )
+            .replace(
+                "$${{display_name}}",
+                &html_escape(citizen.get("display_name")),
+            ),
+        );
     }
     Ok(options)
 }
 
-fn registration_form(
-    election_uuid: uuid::Uuid,
-    fixed_position: Option<&str>,
-    display_name: &str,
-    party: &str,
-    vp_options: &str,
-    vp_display_name: &str,
-    vp_party: &str,
-    messages: &[String],
-) -> String {
-    let position = match fixed_position {
-        Some(position) => format!("<input type=\"hidden\" name=\"position\" value=\"{}\"><p>Position: {}</p>", position, position),
-        None => "<p><label>Position <select name=\"position\"><option value=\"president\">President</option><option value=\"council\">Council</option></select></label></p>".to_string(),
-    };
-    let message_fields = messages.iter().enumerate().map(|(index, message)| format!(
-        "<p><label>Message {} <input type=\"text\" name=\"message_{}\" maxlength=\"100\" value=\"{}\"></label></p>",
-        index + 1, index + 1, html_escape(message),
-    )).collect::<String>();
-    format!(
-        "<form method=\"post\" action=\"/elections/{}/register\">{}
-        <p><label>Your election display name <input type=\"text\" name=\"election_display_name\" value=\"{}\" required></label></p>
-        <p><label>Your party <input type=\"text\" name=\"party\" value=\"{}\" required></label></p>
-        <fieldset><legend>Presidential ticket fields</legend>
-        <p>These fields are only used when registering for president.</p>
-        <p><label>Vice president <select name=\"vice_president_citizen_id\">{}</select></label></p>
-        <p><label>Vice president election display name <input type=\"text\" name=\"vice_president_display_name\" value=\"{}\"></label></p>
-        <p><label>Vice president party <input type=\"text\" name=\"vice_president_party\" value=\"{}\"></label></p>{}</fieldset>
-        <button type=\"submit\">Save registration</button></form>",
-        election_uuid,
-        position,
-        html_escape(display_name),
-        html_escape(party),
-        vp_options,
-        html_escape(vp_display_name),
-        html_escape(vp_party),
-        message_fields,
-    )
+fn message_fields(messages: &[String]) -> String {
+    messages
+        .iter()
+        .enumerate()
+        .map(|(index, message)| {
+            include_str!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/static/candidates/message-field.html"
+            ))
+            .replace("$${{position}}", &(index + 1).to_string())
+            .replace("$${{message}}", &html_escape(message))
+        })
+        .collect()
 }
 
-fn withdrawal_form(election_uuid: uuid::Uuid) -> String {
-    format!(
-        "<form method=\"post\" action=\"/elections/{}/withdraw\"><button type=\"submit\">Withdraw candidacy</button></form>",
-        election_uuid,
-    )
+fn hidden(visible: bool) -> &'static str {
+    if visible { "" } else { "hidden" }
+}
+
+fn disabled(enabled: bool) -> &'static str {
+    if enabled { "" } else { "disabled" }
 }
 
 fn validate_candidate_form(form: &CandidateForm) -> Result<(), &'static str> {
+    trace!(position = %form.position, "Validating candidate registration form");
     if !matches!(form.position.as_str(), "president" | "council") {
         return Err("A valid position is required.");
     }
@@ -641,6 +789,7 @@ fn validate_candidate_form(form: &CandidateForm) -> Result<(), &'static str> {
         }
         validate_messages(&form_messages(form))?;
     }
+    trace!(position = %form.position, "Candidate registration validation succeeded");
     Ok(())
 }
 
@@ -673,6 +822,10 @@ async fn create_presidential_registration(
     form: &CandidateForm,
 ) -> Result<(), sqlx::Error> {
     let vp_citizen_id = form.vice_president_citizen_id.parse::<i64>().unwrap();
+    trace!(
+        election_id,
+        president_citizen_id, vp_citizen_id, "Creating presidential registration"
+    );
     ensure_vp_available(
         transaction,
         election_id,
@@ -710,6 +863,10 @@ async fn create_presidential_registration(
     .bind(vp_id)
     .fetch_one(&mut **transaction)
     .await?;
+    debug!(
+        election_id,
+        president_id, vp_id, ticket_id, "Created presidential ticket records"
+    );
     replace_messages(transaction, ticket_id, &form_messages(form)).await
 }
 
@@ -720,6 +877,10 @@ async fn update_presidential_registration(
     president_citizen_id: i64,
     form: &CandidateForm,
 ) -> Result<(), sqlx::Error> {
+    trace!(
+        election_id,
+        president_id, president_citizen_id, "Updating presidential registration"
+    );
     let ticket = sqlx::query(
         "SELECT presidential_tickets.id, presidential_tickets.status::text AS status,
                 vice_president_candidate_id, vice_president.citizen_id AS old_vp_citizen_id
@@ -749,6 +910,13 @@ async fn update_presidential_registration(
     .await?;
     let mut vp_id: i64 = ticket.get("vice_president_candidate_id");
     if vp_citizen_id != old_vp_citizen_id {
+        debug!(
+            election_id,
+            president_id,
+            old_vp_citizen_id,
+            new_vp_citizen_id = vp_citizen_id,
+            "Replacing presidential ticket vice president"
+        );
         let new_vp_id = sqlx::query_scalar::<_, i64>(
             "INSERT INTO candidates (election_id, citizen_id, position, election_display_name, party)
              VALUES ($1, $2, 'vice_president', $3, $4) RETURNING id",
@@ -794,6 +962,10 @@ async fn ensure_vp_available(
     vp_citizen_id: i64,
     current_vp: Option<i64>,
 ) -> Result<(), sqlx::Error> {
+    trace!(
+        election_id,
+        president_citizen_id, vp_citizen_id, current_vp, "Checking vice president availability"
+    );
     if president_citizen_id == vp_citizen_id {
         return Err(sqlx::Error::Protocol(
             "The president cannot also be the vice president.".to_string(),
@@ -816,14 +988,20 @@ async fn ensure_vp_available(
     .fetch_one(&mut **transaction)
     .await?;
     if !available {
+        warn!(
+            election_id,
+            vp_citizen_id, "Requested vice president is unavailable"
+        );
         return Err(sqlx::Error::Protocol(
             "That vice president is no longer available.".to_string(),
         ));
     }
+    trace!(election_id, vp_citizen_id, "Vice president is available");
     Ok(())
 }
 
 async fn load_messages(state: &AppState, ticket_id: i64) -> Result<Vec<String>, Response> {
+    trace!(ticket_id, "Loading presidential ticket messages");
     let rows = sqlx::query("SELECT position, message FROM presidential_ticket_messages WHERE presidential_ticket_id = $1 ORDER BY position")
         .bind(ticket_id)
         .fetch_all(&state.pool)
@@ -833,6 +1011,14 @@ async fn load_messages(state: &AppState, ticket_id: i64) -> Result<Vec<String>, 
     for row in rows {
         messages[(row.get::<i32, _>("position") - 1) as usize] = row.get("message");
     }
+    debug!(
+        ticket_id,
+        message_count = messages
+            .iter()
+            .filter(|message| !message.is_empty())
+            .count(),
+        "Loaded presidential ticket messages"
+    );
     Ok(messages)
 }
 
@@ -841,6 +1027,11 @@ async fn replace_messages(
     ticket_id: i64,
     messages: &[String],
 ) -> Result<(), sqlx::Error> {
+    trace!(
+        ticket_id,
+        message_count = messages.len(),
+        "Replacing presidential ticket messages"
+    );
     sqlx::query("DELETE FROM presidential_ticket_messages WHERE presidential_ticket_id = $1")
         .bind(ticket_id)
         .execute(&mut **transaction)
@@ -853,6 +1044,11 @@ async fn replace_messages(
             .execute(&mut **transaction)
             .await?;
     }
+    debug!(
+        ticket_id,
+        message_count = messages.len(),
+        "Replaced presidential ticket messages"
+    );
     Ok(())
 }
 
@@ -864,6 +1060,7 @@ async fn insert_withdrawal_change(
     target_uuid: uuid::Uuid,
     previous: &str,
 ) -> Result<(), sqlx::Error> {
+    trace!(election_id, actor_citizen_id = actor.id, target_type, %target_uuid, "Recording candidate withdrawal change");
     sqlx::query(
         "INSERT INTO election_change_log (
             election_id, actor_citizen_id, actor_display_name, target_type, target_uuid,
@@ -878,34 +1075,53 @@ async fn insert_withdrawal_change(
     .bind(previous)
     .execute(&mut **transaction)
     .await?;
+    debug!(election_id, actor_citizen_id = actor.id, target_type, %target_uuid, "Recorded candidate withdrawal change");
     Ok(())
 }
 
 fn candidate_database_error(error: sqlx::Error) -> Response {
     match &error {
         sqlx::Error::Database(database_error) if database_error.is_unique_violation() => {
+            warn!("Candidate registration violated election role uniqueness");
             bad_request("That user already has a role in this election.")
         }
-        sqlx::Error::Protocol(message) => bad_request(message),
+        sqlx::Error::Protocol(message) => {
+            warn!(
+                validation_error = message,
+                "Candidate registration transaction was rejected"
+            );
+            bad_request(message)
+        }
         _ => database_error(error),
     }
 }
 
 fn bad_request(message: &str) -> Response {
+    debug!(
+        validation_error = message,
+        "Returning invalid candidate response"
+    );
     (
         StatusCode::BAD_REQUEST,
-        Html(format!(
-            "<h1>Invalid registration</h1><p>{}</p>",
-            html_escape(message)
-        )),
+        Html(
+            include_str!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/static/candidates/invalid.html"
+            ))
+            .replace("$${{message}}", &html_escape(message)),
+        ),
     )
         .into_response()
 }
 
 fn not_found() -> Response {
+    debug!("Returning candidate not found response");
     (
         StatusCode::NOT_FOUND,
-        Html("<h1>Election or registration not found</h1>"),
+        Html(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/static/candidates/not-found.html"
+        ))),
     )
         .into_response()
 }
@@ -914,7 +1130,10 @@ fn database_error(error: sqlx::Error) -> Response {
     error!(?error, "Failed to manage candidate registration");
     (
         StatusCode::INTERNAL_SERVER_ERROR,
-        Html("<h1>Could not manage candidate registration</h1>"),
+        Html(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/static/candidates/error.html"
+        ))),
     )
         .into_response()
 }

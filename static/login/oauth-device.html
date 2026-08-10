@@ -1,0 +1,49 @@
+<section id="device-login-page" class="page login-page device-login-page">
+    <section id="device-login-pending" class="page-state login-state pending-state">
+        <h1 id="device-login-title" class="page-title login-title device-login-title">Login with another device</h1>
+        <p id="device-login-instructions" class="page-description login-instructions device-login-instructions">On the other device, open <a id="device-login-verification-link" class="external-link verification-link" href="$${{verification_uri}}">$${{verification_uri}}</a> and enter this code:</p>
+        <p id="device-login-code" class="device-code">
+<strong id="device-login-code-value" class="device-code-value">$${{user_code}}</strong>
+</p>
+        <p id="device-login-complete-navigation" class="page-navigation verification-navigation" $${{verification_uri_complete_hidden}}>
+<a id="device-login-complete-link" class="external-link verification-link" href="$${{verification_uri_complete}}" target="_blank">Open a new tab with the code filled in</a>
+</p>
+        <p id="device-login-waiting" class="status-message login-status pending-message">This page will continue automatically after you approve the login.</p>
+        <p id="device-login-manual" class="help-message manual-check-help">If it does not continue automatically, <a id="device-login-manual-link" class="navigation-link manual-check-link" href="/login/oauth/manual-check/$${{request_id}}">check the login status manually</a>.</p>
+    </section>
+    <section id="device-login-declined" class="page-state login-state error-state access-denied-state" hidden>
+        <h1 id="device-login-declined-title" class="page-title error-title">Login declined</h1>
+        <p id="device-login-declined-message" class="error-message">The login request was declined. Please <a id="device-login-declined-retry" class="navigation-link login-link" href="/login">try again</a>.</p>
+    </section>
+    <section id="device-login-expired" class="page-state login-state error-state expired-state" hidden>
+        <h1 id="device-login-expired-title" class="page-title error-title">Login expired</h1>
+        <p id="device-login-expired-message" class="error-message">The device code expired. Please <a id="device-login-expired-retry" class="navigation-link device-login-link" href="/login/oauth/device">start again</a>.</p>
+    </section>
+    <section id="device-login-error" class="page-state login-state error-state oauth-error-state" hidden>
+        <h1 id="device-login-error-title" class="page-title error-title">Login error</h1>
+        <p id="device-login-error-message" class="error-message">Could not complete the login. Please <a id="device-login-error-retry" class="navigation-link login-link" href="/login">try again</a>.</p>
+    </section>
+</section>
+
+<script id="device-login-script" class="page-script login-script">
+    if (typeof EventSource !== "undefined") {
+        const es = new EventSource("/login/oauth/status/$${{request_id}}");
+
+        es.addEventListener("redirect", e => {
+            window.location.href = e.data;
+            es.close();
+        });
+
+        es.addEventListener("error", e => {
+            document.getElementById("device-login-pending").hidden = true;
+            if (e.data === "oauth-access-denied") {
+                document.getElementById("device-login-declined").hidden = false;
+            } else if (e.data === "oauth-expired") {
+                document.getElementById("device-login-expired").hidden = false;
+            } else {
+                document.getElementById("device-login-error").hidden = false;
+            }
+            es.close();
+        });
+    }
+</script>

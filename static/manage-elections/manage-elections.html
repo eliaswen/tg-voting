@@ -1,0 +1,15 @@
+<section id="manage-elections-page" class="page manage-page manage-elections-page">
+    <h1 id="manage-elections-title" class="page-title manage-title">Manage elections</h1>
+    <section id="create-election-section" class="page-section manage-section create-election-section">
+        <h2 id="create-election-title" class="section-title manage-section-title">Create a new season</h2>
+        <form id="create-election-form" class="manage-form election-form" method="post" action="/manage/elections">
+            $${{election_fields}}
+            <button id="create-election-submit" class="form-button submit-button" type="submit">Create season</button>
+        </form>
+    </section>
+    <section id="previous-elections-section" class="page-section manage-section previous-elections-section">
+        <h2 id="previous-elections-title" class="section-title manage-section-title">Previous seasons</h2>
+        <ul id="managed-elections-list" class="item-list managed-elections-list">$${{election_items}}<li id="managed-elections-empty" class="item empty-state managed-elections-empty-state" $${{empty_hidden}}>No elections have been created yet.</li>
+</ul>
+    </section>
+</section>

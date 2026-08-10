@@ -1,31 +1,42 @@
 mod backend;
 mod version;
-use axum::{Router, routing::get};
+use axum::{
+    Router,
+    extract::Request,
+    middleware::{self, Next},
+    response::Response,
+    routing::get,
+    routing::post,
+};
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::env;
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
+use std::time::Instant;
 use tracing::{debug, error, info, trace, warn};
 use version::get_version;
 
 mod error_handling;
 mod pages;
+mod render;
 use error_handling::{error_method, error_not_found};
 use pages::login::AppState;
 use pages::{
-    get_account_page, get_candidate_registration, get_debug, get_edit_election,
-    get_election_candidates, get_election_changes, get_homepage, get_login, get_login_oauth,
-    get_login_oauth_callback, get_login_oauth_complete, get_login_oauth_manual_check,
-    get_login_oauth_status, get_login_reddit, get_manage_election_status, get_manage_elections,
-    get_userinfo, login_threads, post_candidate_registration, post_debug, post_edit_election,
+    get_about, get_account_page, get_candidate_registration, get_debug, get_edit_election,
+    get_election_candidates, get_election_changes, get_elections, get_homepage,
+    get_list_themes_page, get_login, get_login_oauth, get_login_oauth_callback,
+    get_login_oauth_complete, get_login_oauth_device, get_login_oauth_manual_check,
+    get_login_oauth_status, get_logout, get_manage_election_status, get_manage_elections,
+    get_settings, get_userinfo, login_threads, post_account_theme, post_candidate_registration,
+    post_debug, post_delete_account_session, post_delete_all_account_sessions, post_edit_election,
     post_election_status, post_manage_council_candidate, post_manage_elections,
-    post_manage_presidential_ticket, post_withdraw_candidate,
+    post_manage_presidential_ticket, post_settings, post_withdraw_candidate, get_contact,
 };
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    dotenv::dotenv().ok();
+    let dotenv_loaded = dotenv::dotenv().is_ok();
 
     let level = env::var("LOG_LEVEL").unwrap_or_else(|_| "info".to_string());
 
@@ -37,7 +48,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     tracing_subscriber::fmt().with_env_filter(filter).init();
 
-    trace!("Logging system initialised");
+    trace!(%level, dotenv_loaded, "Logging system initialised");
 
     info!("Starting tg-voting server version {}", get_version());
 
@@ -63,11 +74,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             return Err(e.into());
         }
     };
+    debug!(%addr, "Resolved webserver bind address");
 
     let database_url = get_database_url()?;
 
+    trace!("Opening database connection pool");
     let pool = match sqlx::PgPool::connect(&database_url).await {
-        Ok(pool) => pool,
+        Ok(pool) => {
+            info!("Connected to database");
+            pool
+        }
         Err(e) => {
             error!("Failed to connect to database: {e}");
             return Err(e.into());
@@ -77,11 +93,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     debug!("Applying database migrations...");
 
     sqlx::migrate!("./migrations").run(&pool).await?;
+    info!("Database migrations are current");
 
     debug!("Starting webserver server on {}", addr);
 
     let listener = match tokio::net::TcpListener::bind(addr).await {
-        Ok(listener) => listener,
+        Ok(listener) => {
+            info!(%addr, "Webserver listener ready");
+            listener
+        }
         Err(e) => {
             error!("Failed to bind to {addr}: {e}");
             return Err(e.into());
@@ -102,6 +122,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         oauth_client_id: oauth_info.client_id,
         oauth_client_secret: oauth_info.client_secret,
         oauth_authorize_url: oauth_info.authorize_url,
+        oauth_device_authorization_url: oauth_info.device_authorization_url,
         oauth_token_url: oauth_info.token_url,
         oauth_userinfo_url: oauth_info.userinfo_url,
         oauth_issuer: oauth_info.issuer,
@@ -109,22 +130,36 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         public_host: oauth_info.public_host,
         http_client: reqwest::Client::new(),
     };
+    debug!(
+        device_login_configured = state.oauth_device_authorization_url.is_some(),
+        "Application state initialised"
+    );
 
     let router = build_router(state.clone()).await;
+    debug!("Application router built");
 
     trace!("Starting background tasks...");
     tokio::spawn(login_threads(state));
 
-    axum::serve(listener, router).await.unwrap();
+    info!(%addr, "Webserver accepting requests");
+    if let Err(error) = axum::serve(listener, router).await {
+        error!(?error, "Webserver stopped with an error");
+        return Err(error.into());
+    }
+    info!("Webserver stopped");
 
     Ok(())
 }
 
 async fn build_router(state: AppState) -> Router {
+    trace!("Building application router");
     Router::new()
         .route("/", get(get_homepage))
+        .route("/about", get(get_about))
+        .route("/elections", get(get_elections))
         .route("/login", get(get_login))
         .route("/login/oauth", get(get_login_oauth))
+        .route("/login/oauth/device", get(get_login_oauth_device))
         .route("/login/oauth/callback", get(get_login_oauth_callback))
         .route(
             "/login/oauth/status/{request_id}",
@@ -138,10 +173,19 @@ async fn build_router(state: AppState) -> Router {
             "/login/oauth/complete/{request_id}",
             get(get_login_oauth_complete),
         )
-        .route("/login/reddit", get(get_login_reddit))
+        .route("/logout", post(get_logout))
         .route("/userinfo", get(get_userinfo))
         .route("/debug/{path}", get(get_debug).post(post_debug))
         .route("/account", get(get_account_page))
+        .route("/account/set-theme", post(post_account_theme))
+        .route(
+            "/account/sessions/{session_uuid}/delete",
+            post(post_delete_account_session),
+        )
+        .route(
+            "/account/sessions/delete-all",
+            post(post_delete_all_account_sessions),
+        )
         .route(
             "/manage/elections",
             get(get_manage_elections).post(post_manage_elections),
@@ -156,11 +200,11 @@ async fn build_router(state: AppState) -> Router {
         )
         .route(
             "/manage/elections/{election_uuid}/status/council/{candidate_uuid}",
-            axum::routing::post(post_manage_council_candidate),
+            post(post_manage_council_candidate),
         )
         .route(
             "/manage/elections/{election_uuid}/status/tickets/{ticket_uuid}",
-            axum::routing::post(post_manage_presidential_ticket),
+            post(post_manage_presidential_ticket),
         )
         .route(
             "/elections/{election_uuid}/register",
@@ -168,7 +212,7 @@ async fn build_router(state: AppState) -> Router {
         )
         .route(
             "/elections/{election_uuid}/withdraw",
-            axum::routing::post(post_withdraw_candidate),
+            post(post_withdraw_candidate),
         )
         .route(
             "/elections/{election_uuid}/candidates",
@@ -178,8 +222,23 @@ async fn build_router(state: AppState) -> Router {
             "/elections/{election_uuid}/changes",
             get(get_election_changes),
         )
+        .route("/contact", get(get_contact))
+        .route("/themes", get(get_list_themes_page))
+        .route("/settings", get(get_settings).post(post_settings))
         .fallback(error_not_found)
+        .layer(middleware::from_fn(log_request))
         .with_state(state)
+}
+
+async fn log_request(request: Request, next: Next) -> Response {
+    let method = request.method().clone();
+    let path = request.uri().path().to_string();
+    let started_at = Instant::now();
+    debug!(%method, %path, "Request started");
+    let response = next.run(request).await;
+    let status = response.status();
+    info!(%method, %path, %status, elapsed_ms = started_at.elapsed().as_millis(), "Request completed");
+    response
 }
 
 fn get_database_url() -> Result<String, Box<dyn std::error::Error>> {
@@ -241,6 +300,7 @@ struct OAuthInfo {
     client_id: String,
     client_secret: String,
     authorize_url: String,
+    device_authorization_url: Option<String>,
     token_url: String,
     userinfo_url: String,
     issuer: String,
@@ -252,11 +312,13 @@ struct OAuthInfo {
 struct OpenIdConfiguration {
     issuer: String,
     authorization_endpoint: String,
+    device_authorization_endpoint: Option<String>,
     token_endpoint: String,
     userinfo_endpoint: String,
 }
 
 async fn get_oauth_info() -> Result<OAuthInfo, Box<dyn std::error::Error>> {
+    trace!("Loading OAuth configuration");
     fn required(name: &str) -> Result<String, Box<dyn std::error::Error>> {
         env::var(name).map_err(|error| {
             error!("{name} is not set.");
@@ -268,6 +330,7 @@ async fn get_oauth_info() -> Result<OAuthInfo, Box<dyn std::error::Error>> {
         "{}/.well-known/openid-configuration",
         issuer.trim_end_matches('/')
     );
+    debug!("Requesting OpenID Connect discovery document");
     let configuration: OpenIdConfiguration = reqwest::Client::new()
         .get(&discovery_url)
         .send()
@@ -275,7 +338,12 @@ async fn get_oauth_info() -> Result<OAuthInfo, Box<dyn std::error::Error>> {
         .error_for_status()?
         .json()
         .await?;
+    debug!(
+        device_authorization_discovered = configuration.device_authorization_endpoint.is_some(),
+        "Loaded OpenID Connect discovery document"
+    );
     if configuration.issuer != issuer {
+        error!(expected_issuer = %issuer, discovered_issuer = %configuration.issuer, "OpenID Connect issuer mismatch");
         return Err(format!(
             "OIDC discovery issuer mismatch: expected {issuer}, got {}",
             configuration.issuer
@@ -287,6 +355,9 @@ async fn get_oauth_info() -> Result<OAuthInfo, Box<dyn std::error::Error>> {
         client_id: required("OAUTH_CLIENT_ID")?,
         client_secret: required("OAUTH_CLIENT_SECRET")?,
         authorize_url: configuration.authorization_endpoint,
+        device_authorization_url: env::var("OAUTH_DEVICE_AUTHORIZATION_URL")
+            .ok()
+            .or(configuration.device_authorization_endpoint),
         token_url: configuration.token_endpoint,
         userinfo_url: configuration.userinfo_endpoint,
         issuer,
@@ -294,8 +365,10 @@ async fn get_oauth_info() -> Result<OAuthInfo, Box<dyn std::error::Error>> {
         public_host: required("PUBLIC_HOST")?,
     };
     debug!(
-        "OAuth issuer: {}; public host: {}",
-        info.issuer, info.public_host
+        issuer = %info.issuer,
+        public_host = %info.public_host,
+        device_login_configured = info.device_authorization_url.is_some(),
+        "OAuth configuration loaded"
     );
     Ok(info)
 }

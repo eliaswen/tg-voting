@@ -1,0 +1,28 @@
+<article id="managed-presidential-ticket" class="managed-candidate presidential-ticket">
+<h3 id="managed-presidential-ticket-title" class="item-title candidate-name">$${{president_name}} and $${{vice_president_name}}</h3>
+<form id="managed-presidential-ticket-form" class="manage-form candidate-form ticket-form" method="post" action="/manage/elections/$${{election_uuid}}/status/tickets/$${{ticket_uuid}}">
+<p id="managed-president-name-field" class="form-field candidate-field">
+<label id="managed-president-name-label" class="form-label" for="managed-president-name-input">President display name</label> <input id="managed-president-name-input" class="form-control text-input" type="text" name="president_display_name" value="$${{president_name}}" required>
+</p>
+<p id="managed-president-party-field" class="form-field candidate-field">
+<label id="managed-president-party-label" class="form-label" for="managed-president-party-input">President party</label> <input id="managed-president-party-input" class="form-control text-input" type="text" name="president_party" value="$${{president_party}}" required>
+</p>
+<p id="managed-vice-president-field" class="form-field candidate-field">
+<label id="managed-vice-president-label" class="form-label" for="managed-vice-president-select">Vice president</label> <select id="managed-vice-president-select" class="form-control candidate-select" name="vice_president_citizen_id">$${{vice_president_options}}</select>
+</p>
+<p id="managed-vice-president-name-field" class="form-field candidate-field">
+<label id="managed-vice-president-name-label" class="form-label" for="managed-vice-president-name-input">Vice president display name</label> <input id="managed-vice-president-name-input" class="form-control text-input" type="text" name="vice_president_display_name" value="$${{vice_president_name}}" required>
+</p>
+<p id="managed-vice-president-party-field" class="form-field candidate-field">
+<label id="managed-vice-president-party-label" class="form-label" for="managed-vice-president-party-input">Vice president party</label> <input id="managed-vice-president-party-input" class="form-control text-input" type="text" name="vice_president_party" value="$${{vice_president_party}}" required>
+</p>
+<div id="managed-ticket-messages" class="form-fields message-fields">$${{message_fields}}</div>
+<p id="managed-ticket-status-field" class="form-field status-field">
+<label id="managed-ticket-status-label" class="form-label" for="managed-ticket-status-select">Registration status</label> <select id="managed-ticket-status-select" class="form-control status-select" name="status">$${{status_options}}</select>
+</p>
+<p id="managed-ticket-reason-field" class="form-field reason-field">
+<label id="managed-ticket-reason-label" class="form-label" for="managed-ticket-reason-input">Reason</label> <input id="managed-ticket-reason-input" class="form-control text-input reason-input" type="text" name="reason" required>
+</p>
+<button id="managed-ticket-submit" class="form-button submit-button" type="submit">Update ticket</button>
+</form>
+</article>

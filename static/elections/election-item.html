@@ -1,0 +1,17 @@
+<li id="election-item" class="item election-item election-status-$${{status_class}}">
+    <article id="election-summary" class="election-summary">
+        <h2 id="election-name" class="item-title election-name">Season $${{season}}: $${{name}}</h2>
+        <p id="election-status" class="election-detail election-status">Status: <span id="election-status-value" class="status-value">$${{status}}</span>
+</p>
+        <p id="election-registration" class="election-detail election-registration">Candidate registration: <span id="election-registration-value" class="date-range">$${{registration}}</span>
+</p>
+        <p id="election-voting" class="election-detail election-voting">Voting: <span id="election-voting-value" class="date-range">$${{voting}}</span>
+</p>
+        <nav id="election-navigation" class="item-navigation election-navigation">
+            <a id="election-candidates-link" class="navigation-link candidates-link" href="/elections/$${{election_uuid}}/candidates">Candidates</a> |
+            <a id="election-changes-link" class="navigation-link changes-link" href="/elections/$${{election_uuid}}/changes">Change log</a>
+            <span id="election-registration-navigation" class="registration-navigation" $${{registration_hidden}}>| <a id="election-registration-link" class="navigation-link registration-link" href="/elections/$${{election_uuid}}/register">Register as a candidate</a>
+</span>
+        </nav>
+    </article>
+</li>

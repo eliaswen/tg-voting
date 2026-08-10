@@ -1,0 +1,16 @@
+<section id="candidates-page" class="page candidates-page election-candidates-page">
+    <h1 id="candidates-title" class="page-title candidates-title">$${{election_name}} candidates</h1>
+    <section id="presidential-candidates-section" class="page-section candidates-section presidential-candidates-section">
+<h2 id="presidential-candidates-title" class="section-title candidates-section-title">President</h2>
+<ul id="presidential-candidates-list" class="item-list candidates-list presidential-candidates-list">$${{presidential_candidates}}<li id="presidential-candidates-empty" class="item empty-state candidates-empty-state" $${{presidential_empty_hidden}}>No presidential tickets are currently registered.</li>
+</ul>
+</section>
+    <section id="council-candidates-section" class="page-section candidates-section council-candidates-section">
+<h2 id="council-candidates-title" class="section-title candidates-section-title">Council</h2>
+<ul id="council-candidates-list" class="item-list candidates-list council-candidates-list">$${{council_candidates}}<li id="council-candidates-empty" class="item empty-state candidates-empty-state" $${{council_empty_hidden}}>No council candidates are currently registered.</li>
+</ul>
+</section>
+    <nav id="candidates-navigation" class="page-navigation candidates-navigation">
+<a id="candidates-registration-link" class="navigation-link registration-link" href="/elections/$${{election_uuid}}/register">Register or manage my candidacy</a> | <a id="candidates-changes-link" class="navigation-link changes-link" href="/elections/$${{election_uuid}}/changes">Election change log</a> | <a id="candidates-elections-link" class="navigation-link elections-link" href="/elections">All elections</a>
+</nav>
+</section>

@@ -1,65 +1,122 @@
 use axum::{
     extract::State,
-    response::{Html, IntoResponse, Response},
+    response::{IntoResponse, Response},
 };
 use axum_extra::extract::cookie::CookieJar;
 use sqlx::Row;
-use tracing::error;
+use tracing::{debug, error, trace};
 
 use crate::pages::auth::{ELECTION_MINISTER, SUPERADMIN, current_citizen, html_escape};
 use crate::pages::login::AppState;
+use crate::render::render_page;
 
 pub async fn get_homepage(State(state): State<AppState>, jar: CookieJar) -> Response {
-    let account = match current_citizen(&state, &jar).await {
-        Ok(Some(citizen)) if citizen.banned => "<p>Your account is banned.</p>".to_string(),
+    trace!("Handling homepage request");
+    let (
+        account_banned_hidden,
+        account_logged_in_hidden,
+        account_logged_out_hidden,
+        management_hidden,
+        display_name,
+    ) = match current_citizen(&state, &jar).await {
+        Ok(Some(citizen)) if citizen.banned => {
+            debug!(
+                citizen_id = citizen.id,
+                "Rendering banned account homepage state"
+            );
+            ("", "hidden", "hidden", "hidden", String::new())
+        }
         Ok(Some(citizen)) => {
-            let manage = if citizen.role & (ELECTION_MINISTER | SUPERADMIN) != 0 {
-                "<p><a href=\"/manage/elections\">Manage elections</a></p>"
-            } else {
+            let management_hidden = if citizen.role & (ELECTION_MINISTER | SUPERADMIN) != 0 {
                 ""
+            } else {
+                "hidden"
             };
-            format!(
-                "<p>Logged in as {}</p><p><a href=\"/account\">Account</a></p>{}",
+            debug!(
+                citizen_id = citizen.id,
+                manager = management_hidden.is_empty(),
+                "Rendering authenticated homepage state"
+            );
+            (
+                "hidden",
+                "",
+                "hidden",
+                management_hidden,
                 html_escape(&citizen.display_name),
-                manage,
             )
         }
-        Ok(None) => "<p><a href=\"/login\">Login</a></p>".to_string(),
+        Ok(None) => {
+            debug!("Rendering anonymous homepage state");
+            ("hidden", "hidden", "", "hidden", String::new())
+        }
         Err(response) => return response,
     };
 
     let elections = match sqlx::query(
-        "SELECT uuid, season, name, status::text AS status FROM elections ORDER BY season DESC",
+        "SELECT uuid, season, name, status::text AS status FROM elections
+         WHERE status <> 'draft' ORDER BY season DESC LIMIT 1",
     )
     .fetch_all(&state.pool)
     .await
     {
-        Ok(elections) => elections,
+        Ok(elections) => {
+            debug!(
+                election_count = elections.len(),
+                "Retrieved latest election for homepage"
+            );
+            elections
+        }
         Err(error) => {
-            error!(?error, "Failed to retrieve elections for homepage");
-            return Html("<h1>Elections</h1><p>Could not retrieve elections.</p>").into_response();
+            error!(?error, "Failed to retrieve election for homepage");
+            Vec::new()
         }
     };
-    let mut items = String::new();
-    for election in elections {
+    let (
+        latest_election_hidden,
+        no_elections_hidden,
+        election_uuid,
+        season,
+        election_name,
+        election_status,
+    ) = if let Some(election) = elections.first() {
         let uuid: uuid::Uuid = election.get("uuid");
-        items.push_str(&format!(
-            "<li>Season {}: {} ({}) - <a href=\"/elections/{}/candidates\">Candidates</a> - <a href=\"/elections/{}/register\">Register</a> - <a href=\"/elections/{}/changes\">Changes</a></li>",
-            election.get::<i32, _>("season"),
+        trace!(election_uuid = %uuid, "Rendering latest election homepage state");
+        (
+            "",
+            "hidden",
+            uuid.to_string(),
+            election.get::<i32, _>("season").to_string(),
             html_escape(election.get("name")),
             html_escape(election.get("status")),
-            uuid,
-            uuid,
-            uuid,
-        ));
-    }
-    if items.is_empty() {
-        items.push_str("<li>No elections have been created yet.</li>");
-    }
-    Html(format!(
-        "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><title>Elections</title></head><body><h1>Elections</h1>{}<h2>Elections</h2><ul>{}</ul></body></html>",
-        account,
-        items,
+        )
+    } else {
+        trace!("Rendering homepage without a visible election");
+        (
+            "hidden",
+            "",
+            String::new(),
+            String::new(),
+            String::new(),
+            String::new(),
+        )
+    };
+    let content = include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/static/homepage/homepage.html"
     ))
-    .into_response()
+    .replace("$${{account_banned_hidden}}", account_banned_hidden)
+    .replace("$${{account_logged_in_hidden}}", account_logged_in_hidden)
+    .replace("$${{account_logged_out_hidden}}", account_logged_out_hidden)
+    .replace("$${{management_hidden}}", management_hidden)
+    .replace("$${{display_name}}", &display_name)
+    .replace("$${{latest_election_hidden}}", latest_election_hidden)
+    .replace("$${{no_elections_hidden}}", no_elections_hidden)
+    .replace("$${{election_uuid}}", &election_uuid)
+    .replace("$${{season}}", &season)
+    .replace("$${{election_name}}", &election_name)
+    .replace("$${{election_status}}", &election_status);
+    trace!("Rendering homepage");
+    render_page(&content, "Home", jar, &state.pool)
+        .await
+        .into_response()
 }

@@ -4,7 +4,7 @@ use axum::{
 };
 use axum_extra::extract::cookie::CookieJar;
 use sqlx::Row;
-use tracing::error;
+use tracing::{debug, error, trace, warn};
 
 use crate::backend::login_oauth::hash_token;
 use crate::pages::login::AppState;
@@ -23,7 +23,12 @@ pub async fn current_citizen(
     state: &AppState,
     jar: &CookieJar,
 ) -> Result<Option<AuthenticatedCitizen>, Response> {
+    trace!(
+        session_present = jar.get("session").is_some(),
+        "Resolving current citizen"
+    );
     let Some(session_token) = jar.get("session").map(|cookie| cookie.value().to_string()) else {
+        debug!("No session cookie was supplied");
         return Ok(None);
     };
 
@@ -45,18 +50,33 @@ pub async fn current_citizen(
     .await;
 
     match citizen {
-        Ok(Some(citizen)) => Ok(Some(AuthenticatedCitizen {
-            id: citizen.get("id"),
-            role: citizen.get("role"),
-            banned: citizen.get("banned"),
-            display_name: citizen.get("display_name"),
-        })),
-        Ok(None) => Ok(None),
+        Ok(Some(citizen)) => {
+            let citizen = AuthenticatedCitizen {
+                id: citizen.get("id"),
+                role: citizen.get("role"),
+                banned: citizen.get("banned"),
+                display_name: citizen.get("display_name"),
+            };
+            debug!(
+                citizen_id = citizen.id,
+                role = citizen.role,
+                banned = citizen.banned,
+                "Resolved authenticated citizen"
+            );
+            Ok(Some(citizen))
+        }
+        Ok(None) => {
+            debug!("Session did not resolve to an active citizen");
+            Ok(None)
+        }
         Err(error) => {
             error!(?error, "Failed to retrieve authenticated citizen");
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Html("<h1>Could not authorize this request</h1>"),
+                Html(include_str!(concat!(
+                    env!("CARGO_MANIFEST_DIR"),
+                    "/static/errors/authorization.html"
+                ))),
             )
                 .into_response())
         }
@@ -67,10 +87,27 @@ pub async fn require_citizen(
     state: &AppState,
     jar: &CookieJar,
 ) -> Result<AuthenticatedCitizen, Response> {
+    trace!("Requiring authenticated citizen");
     match current_citizen(state, jar).await? {
-        Some(citizen) if !citizen.banned => Ok(citizen),
-        Some(_) => Err((StatusCode::FORBIDDEN, Html("<h1>403 Forbidden</h1>")).into_response()),
-        None => Err(Redirect::to("/login").into_response()),
+        Some(citizen) if !citizen.banned => {
+            debug!(citizen_id = citizen.id, "Citizen authorization succeeded");
+            Ok(citizen)
+        }
+        Some(citizen) => {
+            warn!(citizen_id = citizen.id, "Rejected banned citizen");
+            Err((
+                StatusCode::FORBIDDEN,
+                Html(include_str!(concat!(
+                    env!("CARGO_MANIFEST_DIR"),
+                    "/static/errors/forbidden.html"
+                ))),
+            )
+                .into_response())
+        }
+        None => {
+            debug!("Redirecting unauthenticated request to login");
+            Err(Redirect::to("/login").into_response())
+        }
     }
 }
 
@@ -78,10 +115,28 @@ pub async fn require_election_manager(
     state: &AppState,
     jar: &CookieJar,
 ) -> Result<AuthenticatedCitizen, Response> {
+    trace!("Requiring election manager");
     let citizen = require_citizen(state, jar).await?;
     if citizen.role & (ELECTION_MINISTER | SUPERADMIN) == 0 {
-        return Err((StatusCode::FORBIDDEN, Html("<h1>403 Forbidden</h1>")).into_response());
+        warn!(
+            citizen_id = citizen.id,
+            role = citizen.role,
+            "Rejected citizen without election management permission"
+        );
+        return Err((
+            StatusCode::FORBIDDEN,
+            Html(include_str!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/static/errors/forbidden.html"
+            ))),
+        )
+            .into_response());
     }
+    debug!(
+        citizen_id = citizen.id,
+        role = citizen.role,
+        "Election manager authorization succeeded"
+    );
     Ok(citizen)
 }
 

@@ -1,0 +1,18 @@
+<article id="managed-council-candidate" class="managed-candidate council-candidate">
+<h3 id="managed-council-candidate-title" class="item-title candidate-name">$${{name}}</h3>
+<form id="managed-council-candidate-form" class="manage-form candidate-form council-form" method="post" action="/manage/elections/$${{election_uuid}}/status/council/$${{candidate_uuid}}">
+<p id="managed-council-name-field" class="form-field candidate-field">
+<label id="managed-council-name-label" class="form-label" for="managed-council-name-input">Display name</label> <input id="managed-council-name-input" class="form-control text-input" type="text" name="election_display_name" value="$${{name}}" required>
+</p>
+<p id="managed-council-party-field" class="form-field candidate-field">
+<label id="managed-council-party-label" class="form-label" for="managed-council-party-input">Party</label> <input id="managed-council-party-input" class="form-control text-input" type="text" name="party" value="$${{party}}" required>
+</p>
+<p id="managed-council-status-field" class="form-field status-field">
+<label id="managed-council-status-label" class="form-label" for="managed-council-status-select">Registration status</label> <select id="managed-council-status-select" class="form-control status-select" name="status">$${{status_options}}</select>
+</p>
+<p id="managed-council-reason-field" class="form-field reason-field">
+<label id="managed-council-reason-label" class="form-label" for="managed-council-reason-input">Reason</label> <input id="managed-council-reason-input" class="form-control text-input reason-input" type="text" name="reason" required>
+</p>
+<button id="managed-council-submit" class="form-button submit-button" type="submit">Update candidate</button>
+</form>
+</article>

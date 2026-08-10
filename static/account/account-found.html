@@ -1,0 +1,53 @@
+<section id="account-page" class="page account-page account-found-page">
+<h1 id="account-title" class="page-title account-title">Account Page</h1>
+
+<section id="account-information" class="page-section account-section account-information-section">
+<h2 id="account-information-title" class="section-title account-section-title">Account Information</h2>
+<p id="account-username" class="account-detail account-username">Username: <span id="account-username-value" class="account-detail-value">$${{username}}</span>
+</p>
+<p id="account-email" class="account-detail account-email">Email: <span id="account-email-value" class="account-detail-value">$${{email}}</span>
+</p>
+<p id="account-display-name" class="account-detail account-display-name">Display Name: <span id="account-display-name-value" class="account-detail-value">$${{display_name}}</span>
+</p>
+<p id="account-edit-description" class="account-description account-edit-description">If you'd like to edit your account information, do so on <a id="account-authentik-link" class="external-link account-edit-link" href="https://auth.ewenlau.net/if/user/#/settings">Authentik</a>.</p>
+</section>
+
+<section id="account-settings" class="page-section account-section account-settings-section">
+<h2 id="account-settings-title" class="section-title account-section-title">Server Settings</h2>
+<p id="account-theme-description" class="setting-description theme-description">The theme you get is set by your cookies, and is local, but is removed once you log out. You can set a theme in your account that applies whenever you log in.</p>
+
+<p id="account-current-theme" class="setting-value current-theme">Current Theme: <span id="account-current-theme-name" class="theme-name">$${{current_theme}}</span>
+</p>
+
+<form id="account-theme-form" class="settings-form theme-form" method="post" action="/account/set-theme">
+    <label id="account-theme-label" class="form-label theme-label" for="account-theme-select">Set a new theme:</label>
+    <select id="account-theme-select" class="form-control theme-select" name="theme">
+        $${{theme_options}}
+    </select>
+    <button id="account-theme-submit" class="form-button submit-button" type="submit">Apply</button>
+</form>
+
+<p id="account-theme-list-navigation" class="page-navigation theme-navigation">To see the available themes, <a id="account-themes-link" class="navigation-link themes-link" href="/themes">click here</a>.</p>
+
+<p id="account-settings-navigation" class="page-navigation settings-navigation">If you want to edit your local theme settings, you can do so on the <a id="account-settings-link" class="navigation-link settings-link" href="/settings">settings</a> page.</p>
+</section>
+
+<section id="account-sessions" class="page-section account-section account-sessions-section">
+<h2 id="account-sessions-title" class="section-title account-section-title sessions-title">Sessions</h2>
+<p id="account-sessions-description" class="account-description sessions-description">These are the devices currently logged in to your account.</p>
+<p id="account-sessions-empty" class="account-description sessions-empty" $${{sessions_empty_hidden}}>There are no active sessions.</p>
+<div id="account-session-list" class="account-session-list session-list">
+$${{session_items}}
+</div>
+<form id="account-delete-all-sessions-form" class="account-form session-form delete-all-sessions-form" method="post" action="/account/sessions/delete-all">
+    <button id="account-delete-all-sessions-button" class="form-button session-button delete-all-sessions-button" type="submit">Log out of all sessions</button>
+</form>
+</section>
+
+<section id="account-actions" class="page-section account-section account-actions-section">
+<h2 id="account-actions-title" class="section-title account-section-title">Account Actions</h2>
+<form id="account-logout-form" class="account-form logout-form" method="post" action="/logout">
+    <button id="account-logout-button" class="form-button logout-button" type="submit">Logout</button>
+</form>
+</section>
+</section>

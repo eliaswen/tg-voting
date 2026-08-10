@@ -1,14 +1,13 @@
-<!DOCTYPE html>
-<head>
-<title>Sign In</title>
-</head>
-
-<body>
-
-<div>
-    <h1>Sign In</h1>
-    <a href="/login/oauth">Sign in</a>
-</div>
-
-</body>
-</html>
+<section id="login-page" class="page login-page">
+<h1 id="login-title" class="page-title login-title">Login</h1>
+<p id="login-oauth-option" class="login-option oauth-login-option">
+<a id="login-oauth-link" class="navigation-link login-link oauth-login-link" href="/login/oauth">Login with Authentik</a>
+</p>
+<p id="login-device-option" class="login-option device-login-option">
+<a id="login-device-link" class="navigation-link login-link device-login-link" href="/login/oauth/device">Login with another device</a>
+</p>
+<noscript id="login-noscript" class="noscript-message login-noscript">
+    <p id="login-javascript-warning" class="warning-message javascript-warning">It appears Javascript is disabled or not supported by your browser. Authentik, the authentication service, requires Javascript to function.<br id="login-warning-break" class="text-break">
+    You probably need to use the "Login with a different device" option.</p>
+</noscript>
+</section>

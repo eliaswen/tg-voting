@@ -1,0 +1,21 @@
+<article id="account-session" class="account-session session-item">
+    <h3 id="account-session-name" class="session-name">$${{device_name}}</h3>
+    <p id="account-session-current" class="session-current" $${{current_session_hidden}}>Current session</p>
+    <dl id="account-session-details" class="session-details">
+        <div id="account-session-type-detail" class="session-detail session-type-detail">
+            <dt id="account-session-type-label" class="session-detail-label session-type-label">Device type</dt>
+            <dd id="account-session-type" class="session-detail-value session-type">$${{device_type}}</dd>
+        </div>
+        <div id="account-session-created-detail" class="session-detail session-created-detail">
+            <dt id="account-session-created-label" class="session-detail-label session-created-label">Logged in</dt>
+            <dd id="account-session-created" class="session-detail-value session-created">$${{created_at}}</dd>
+        </div>
+        <div id="account-session-expires-detail" class="session-detail session-expires-detail">
+            <dt id="account-session-expires-label" class="session-detail-label session-expires-label">Expires</dt>
+            <dd id="account-session-expires" class="session-detail-value session-expires">$${{expires_at}}</dd>
+        </div>
+    </dl>
+    <form id="account-delete-session-form" class="account-form session-form delete-session-form" method="post" action="/account/sessions/$${{session_uuid}}/delete">
+        <button id="account-delete-session-button" class="form-button session-button delete-session-button" type="submit">Log out this session</button>
+    </form>
+</article>

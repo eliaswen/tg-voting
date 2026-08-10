@@ -1,0 +1,17 @@
+<section id="settings-page" class="page settings-page">
+    <h1 id="settings-title" class="page-title settings-title">Settings</h1>
+    <section id="settings-theme-section" class="page-section settings-section theme-settings-section">
+        <h2 id="settings-theme-title" class="section-title settings-section-title">Local theme</h2>
+        <p id="settings-current-theme" class="setting-value current-theme">Current theme: <span id="settings-current-theme-name" class="theme-name">$${{current_theme}}</span>
+</p>
+        <p id="settings-theme-description" class="setting-description theme-description">This setting is stored in this browser. If you are logged in, you can save a theme to your account from the <a id="settings-account-link" class="navigation-link account-link" href="/account">account page</a>.</p>
+        <form id="settings-theme-form" class="settings-form theme-form" method="post" action="/settings">
+            <label id="settings-theme-label" class="form-label theme-label" for="settings-theme-select">Theme</label>
+            <select id="settings-theme-select" class="form-control theme-select" name="theme">$${{theme_options}}</select>
+            <button id="settings-theme-submit" class="form-button submit-button" type="submit">Apply</button>
+        </form>
+        <p id="settings-theme-navigation" class="page-navigation settings-navigation">
+<a id="settings-themes-link" class="navigation-link themes-link" href="/themes">View available themes</a>
+</p>
+    </section>
+</section>

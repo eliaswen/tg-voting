@@ -8,10 +8,11 @@ use axum_extra::extract::cookie::CookieJar;
 use chrono::NaiveDateTime;
 use serde::Deserialize;
 use sqlx::Row;
-use tracing::error;
+use tracing::{debug, error, info, trace, warn};
 
 use crate::pages::auth::{html_escape, require_election_manager};
 use crate::pages::login::AppState;
+use crate::render::render_page;
 
 #[derive(Deserialize)]
 pub struct ElectionForm {
@@ -27,6 +28,7 @@ pub struct ElectionForm {
 }
 
 pub async fn get_manage_elections(State(state): State<AppState>, jar: CookieJar) -> Response {
+    trace!("Handling election management page request");
     if let Err(response) = require_election_manager(&state, &jar).await {
         return response;
     }
@@ -40,7 +42,13 @@ pub async fn get_manage_elections(State(state): State<AppState>, jar: CookieJar)
     .await;
 
     let elections = match elections {
-        Ok(elections) => elections,
+        Ok(elections) => {
+            debug!(
+                election_count = elections.len(),
+                "Retrieved elections for management page"
+            );
+            elections
+        }
         Err(error) => {
             error!(?error, "Failed to retrieve elections");
             return server_error();
@@ -53,40 +61,34 @@ pub async fn get_manage_elections(State(state): State<AppState>, jar: CookieJar)
         let season: i32 = election.get("season");
         let name: String = election.get("name");
         let status: String = election.get("status");
-        previous_elections.push_str(&format!(
-            "<li>Season {}: {} ({}) - <a href=\"/manage/elections/{}/edit\">Edit</a> - <a href=\"/manage/elections/{}/status\">Status</a> - <a href=\"/elections/{}/candidates\">Candidates</a> - <a href=\"/elections/{}/changes\">Changes</a></li>",
-            season,
-            html_escape(&name),
-            html_escape(&status),
-            uuid,
-            uuid,
-            uuid,
-            uuid,
-        ));
+        trace!(election_uuid = %uuid, season, %status, "Rendering managed election");
+        previous_elections.push_str(
+            &include_str!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/static/manage-elections/election-item.html"
+            ))
+            .replace("$${{season}}", &season.to_string())
+            .replace("$${{name}}", &html_escape(&name))
+            .replace("$${{status}}", &html_escape(&status))
+            .replace("$${{election_uuid}}", &uuid.to_string()),
+        );
     }
-    if previous_elections.is_empty() {
-        previous_elections.push_str("<li>No elections have been created yet.</li>");
-    }
-
-    Html(format!(
-        "<!doctype html>
-        <html lang=\"en\">
-        <head><meta charset=\"utf-8\"><title>Manage elections</title></head>
-        <body>
-            <h1>Manage elections</h1>
-            <h2>Create a new season</h2>
-            <form method=\"post\" action=\"/manage/elections\">
-                {}
-                <button type=\"submit\">Create season</button>
-            </form>
-            <h2>Previous seasons</h2>
-            <ul>{}</ul>
-        </body>
-        </html>",
-        election_fields(None),
-        previous_elections,
+    let empty_hidden = if previous_elections.is_empty() {
+        ""
+    } else {
+        "hidden"
+    };
+    let content = include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/static/manage-elections/manage-elections.html"
     ))
-    .into_response()
+    .replace("$${{election_fields}}", &election_fields(None))
+    .replace("$${{election_items}}", &previous_elections)
+    .replace("$${{empty_hidden}}", empty_hidden);
+    trace!("Rendering election management page");
+    render_page(&content, "Manage elections", jar, &state.pool)
+        .await
+        .into_response()
 }
 
 pub async fn post_manage_elections(
@@ -94,10 +96,16 @@ pub async fn post_manage_elections(
     jar: CookieJar,
     Form(form): Form<ElectionForm>,
 ) -> Response {
+    trace!(season = form.season, "Handling election creation");
     if let Err(response) = require_election_manager(&state, &jar).await {
         return response;
     }
     if let Err(message) = validate_election(&form) {
+        warn!(
+            season = form.season,
+            validation_error = message,
+            "Rejected invalid election creation"
+        );
         return bad_request(message);
     }
 
@@ -127,7 +135,14 @@ pub async fn post_manage_elections(
     .await;
 
     match query {
-        Ok(_) => Redirect::to("/manage/elections").into_response(),
+        Ok(result) => {
+            info!(
+                season = form.season,
+                rows_affected = result.rows_affected(),
+                "Created election"
+            );
+            Redirect::to("/manage/elections").into_response()
+        }
         Err(error) => database_form_error(error),
     }
 }
@@ -137,6 +152,7 @@ pub async fn get_edit_election(
     jar: CookieJar,
     Path(election_uuid): Path<uuid::Uuid>,
 ) -> Response {
+    trace!(%election_uuid, "Handling election edit page request");
     if let Err(response) = require_election_manager(&state, &jar).await {
         return response;
     }
@@ -158,31 +174,42 @@ pub async fn get_edit_election(
     .await;
 
     let election = match election {
-        Ok(Some(election)) => ElectionForm {
-            season: election.get("season"),
-            name: election.get("name"),
-            registration_starts_at: election
-                .get::<Option<String>, _>("registration_starts_at")
-                .unwrap_or_default(),
-            voter_code_registration_starts_at: election
-                .get::<Option<String>, _>("voter_code_registration_starts_at")
-                .unwrap_or_default(),
-            voter_code_registration_ends_at: election
-                .get::<Option<String>, _>("voter_code_registration_ends_at")
-                .unwrap_or_default(),
-            registration_ends_at: election
-                .get::<Option<String>, _>("registration_ends_at")
-                .unwrap_or_default(),
-            voting_starts_at: election
-                .get::<Option<String>, _>("voting_starts_at")
-                .unwrap_or_default(),
-            voting_ends_at: election
-                .get::<Option<String>, _>("voting_ends_at")
-                .unwrap_or_default(),
-            maximum_council_choices: election.get("maximum_council_choices"),
-        },
+        Ok(Some(election)) => {
+            debug!(%election_uuid, "Retrieved election for editing");
+            ElectionForm {
+                season: election.get("season"),
+                name: election.get("name"),
+                registration_starts_at: election
+                    .get::<Option<String>, _>("registration_starts_at")
+                    .unwrap_or_default(),
+                voter_code_registration_starts_at: election
+                    .get::<Option<String>, _>("voter_code_registration_starts_at")
+                    .unwrap_or_default(),
+                voter_code_registration_ends_at: election
+                    .get::<Option<String>, _>("voter_code_registration_ends_at")
+                    .unwrap_or_default(),
+                registration_ends_at: election
+                    .get::<Option<String>, _>("registration_ends_at")
+                    .unwrap_or_default(),
+                voting_starts_at: election
+                    .get::<Option<String>, _>("voting_starts_at")
+                    .unwrap_or_default(),
+                voting_ends_at: election
+                    .get::<Option<String>, _>("voting_ends_at")
+                    .unwrap_or_default(),
+                maximum_council_choices: election.get("maximum_council_choices"),
+            }
+        }
         Ok(None) => {
-            return (StatusCode::NOT_FOUND, Html("<h1>Election not found</h1>")).into_response();
+            debug!(%election_uuid, "Election edit target was not found");
+            return (
+                StatusCode::NOT_FOUND,
+                Html(include_str!(concat!(
+                    env!("CARGO_MANIFEST_DIR"),
+                    "/static/manage-elections/not-found.html"
+                ))),
+            )
+                .into_response();
         }
         Err(error) => {
             error!(?error, "Failed to retrieve election");
@@ -190,24 +217,17 @@ pub async fn get_edit_election(
         }
     };
 
-    Html(format!(
-        "<!doctype html>
-        <html lang=\"en\">
-        <head><meta charset=\"utf-8\"><title>Edit election</title></head>
-        <body>
-            <h1>Edit season {}</h1>
-            <form method=\"post\" action=\"/manage/elections/{}/edit\">
-                {}
-                <button type=\"submit\">Save election</button>
-            </form>
-            <p><a href=\"/manage/elections\">Back to elections</a></p>
-        </body>
-        </html>",
-        election.season,
-        election_uuid,
-        election_fields(Some(&election)),
+    let content = include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/static/manage-elections/edit-election.html"
     ))
-    .into_response()
+    .replace("$${{season}}", &election.season.to_string())
+    .replace("$${{election_uuid}}", &election_uuid.to_string())
+    .replace("$${{election_fields}}", &election_fields(Some(&election)));
+    trace!(%election_uuid, "Rendering election edit page");
+    render_page(&content, "Edit election", jar, &state.pool)
+        .await
+        .into_response()
 }
 
 pub async fn post_edit_election(
@@ -216,10 +236,12 @@ pub async fn post_edit_election(
     Path(election_uuid): Path<uuid::Uuid>,
     Form(form): Form<ElectionForm>,
 ) -> Response {
+    trace!(%election_uuid, season = form.season, "Handling election update");
     if let Err(response) = require_election_manager(&state, &jar).await {
         return response;
     }
     if let Err(message) = validate_election(&form) {
+        warn!(%election_uuid, season = form.season, validation_error = message, "Rejected invalid election update");
         return bad_request(message);
     }
 
@@ -250,14 +272,30 @@ pub async fn post_edit_election(
 
     match query {
         Ok(result) if result.rows_affected() == 1 => {
+            info!(%election_uuid, season = form.season, "Updated election");
             Redirect::to("/manage/elections").into_response()
         }
-        Ok(_) => (StatusCode::NOT_FOUND, Html("<h1>Election not found</h1>")).into_response(),
+        Ok(result) => {
+            debug!(%election_uuid, rows_affected = result.rows_affected(), "Election update target was not found");
+            (
+                StatusCode::NOT_FOUND,
+                Html(include_str!(concat!(
+                    env!("CARGO_MANIFEST_DIR"),
+                    "/static/manage-elections/not-found.html"
+                ))),
+            )
+                .into_response()
+        }
         Err(error) => database_form_error(error),
     }
 }
 
 fn validate_election(form: &ElectionForm) -> Result<(), &'static str> {
+    trace!(
+        season = form.season,
+        maximum_council_choices = form.maximum_council_choices,
+        "Validating election form"
+    );
     if form.season <= 0 {
         return Err("Season must be greater than zero.");
     }
@@ -285,11 +323,13 @@ fn validate_election(form: &ElectionForm) -> Result<(), &'static str> {
     if matches!((voting_starts_at, voting_ends_at), (Some(start), Some(end)) if start >= end) {
         return Err("Voting must end after it starts.");
     }
+    trace!(season = form.season, "Election form validation succeeded");
     Ok(())
 }
 
 fn parse_date(value: &str) -> Result<Option<NaiveDateTime>, &'static str> {
     if value.is_empty() {
+        trace!("Accepted empty election date");
         return Ok(None);
     }
     NaiveDateTime::parse_from_str(value, "%Y-%m-%dT%H:%M")
@@ -298,6 +338,7 @@ fn parse_date(value: &str) -> Result<Option<NaiveDateTime>, &'static str> {
 }
 
 fn election_fields(election: Option<&ElectionForm>) -> String {
+    trace!(editing = election.is_some(), "Rendering election fields");
     let empty = ElectionForm {
         season: 1,
         name: String::new(),
@@ -311,31 +352,46 @@ fn election_fields(election: Option<&ElectionForm>) -> String {
     };
     let election = election.unwrap_or(&empty);
 
-    format!(
-        "<p><label>Season <input type=\"number\" name=\"season\" min=\"1\" value=\"{}\" required></label></p>
-        <p><label>Name <input type=\"text\" name=\"name\" value=\"{}\" required></label></p>
-        <p><label>Registration starts <input type=\"datetime-local\" name=\"registration_starts_at\" value=\"{}\"></label></p>
-        <p><label>Registration ends <input type=\"datetime-local\" name=\"registration_ends_at\" value=\"{}\"></label></p>
-        <p><label>Voter code registration starts <input type=\"datetime-local\" name=\"voter_code_registration_starts_at\" value=\"{}\"></label></p>
-        <p><label>Voter code registration ends <input type=\"datetime-local\" name=\"voter_code_registration_ends_at\" value=\"{}\"></label></p>
-        <p><label>Voting starts <input type=\"datetime-local\" name=\"voting_starts_at\" value=\"{}\"></label></p>
-        <p><label>Voting ends <input type=\"datetime-local\" name=\"voting_ends_at\" value=\"{}\"></label></p>
-        <p><label>Maximum council choices <input type=\"number\" name=\"maximum_council_choices\" min=\"1\" value=\"{}\" required></label></p>",
-        election.season,
-        html_escape(&election.name),
-        html_escape(&election.registration_starts_at),
-        html_escape(&election.registration_ends_at),
-        html_escape(&election.voter_code_registration_starts_at),
-        html_escape(&election.voter_code_registration_ends_at),
-        html_escape(&election.voting_starts_at),
-        html_escape(&election.voting_ends_at),
-        election.maximum_council_choices,
+    include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/static/manage-elections/election-fields.html"
+    ))
+    .replace("$${{season}}", &election.season.to_string())
+    .replace("$${{name}}", &html_escape(&election.name))
+    .replace(
+        "$${{registration_starts_at}}",
+        &html_escape(&election.registration_starts_at),
+    )
+    .replace(
+        "$${{registration_ends_at}}",
+        &html_escape(&election.registration_ends_at),
+    )
+    .replace(
+        "$${{voter_code_registration_starts_at}}",
+        &html_escape(&election.voter_code_registration_starts_at),
+    )
+    .replace(
+        "$${{voter_code_registration_ends_at}}",
+        &html_escape(&election.voter_code_registration_ends_at),
+    )
+    .replace(
+        "$${{voting_starts_at}}",
+        &html_escape(&election.voting_starts_at),
+    )
+    .replace(
+        "$${{voting_ends_at}}",
+        &html_escape(&election.voting_ends_at),
+    )
+    .replace(
+        "$${{maximum_council_choices}}",
+        &election.maximum_council_choices.to_string(),
     )
 }
 
 fn database_form_error(error: sqlx::Error) -> Response {
     if let sqlx::Error::Database(database_error) = &error {
         if database_error.is_unique_violation() {
+            warn!("Election save violated season uniqueness");
             return bad_request("That season already exists.");
         }
     }
@@ -344,17 +400,31 @@ fn database_form_error(error: sqlx::Error) -> Response {
 }
 
 fn bad_request(message: &str) -> Response {
+    debug!(
+        validation_error = message,
+        "Returning invalid election form response"
+    );
     (
         StatusCode::BAD_REQUEST,
-        Html(format!("<h1>Invalid election</h1><p>{}</p><p><a href=\"/manage/elections\">Back to elections</a></p>", html_escape(message))),
+        Html(
+            include_str!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/static/manage-elections/invalid.html"
+            ))
+            .replace("$${{message}}", &html_escape(message)),
+        ),
     )
         .into_response()
 }
 
 fn server_error() -> Response {
+    error!("Returning election management server error response");
     (
         StatusCode::INTERNAL_SERVER_ERROR,
-        Html("<h1>Could not manage elections</h1>"),
+        Html(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/static/manage-elections/error.html"
+        ))),
     )
         .into_response()
 }
