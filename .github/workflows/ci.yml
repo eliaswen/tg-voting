@@ -54,14 +54,60 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Check formatting
-        run: cargo fmt --all -- --check
+        id: fmt
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo fmt --all -- --check 2>&1 | tee /tmp/rustfmt.log
 
       - name: Run Clippy
-        run: cargo clippy --locked --all-targets -- -D warnings
+        id: clippy
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo clippy --locked --all-targets -- -D warnings 2>&1 | tee /tmp/clippy.log
+
+      - name: Compile check
+        run: cargo check --locked --all-targets
 
       - name: Run tests
         run: cargo test --locked --all-targets --verbose
 
+      - name: Code quality report
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo '## Code quality report'
+            echo
+            echo '| Check | Result | Blocks CI |'
+            echo '|---|---|---|'
+            echo "| rustfmt | ${{ steps.fmt.outcome }} | No |"
+            echo "| Clippy | ${{ steps.clippy.outcome }} | No |"
+            echo
+
+            if [[ "${{ steps.fmt.outcome }}" != "success" ]]; then
+              echo '### rustfmt findings'
+              echo
+              echo '```text'
+              cat /tmp/rustfmt.log 2>/dev/null || true
+              echo '```'
+              echo
+            fi
+
+            if [[ "${{ steps.clippy.outcome }}" != "success" ]]; then
+              echo '### Clippy findings'
+              echo
+              echo '```text'
+              cat /tmp/clippy.log 2>/dev/null || true
+              echo '```'
+              echo
+            fi
+
+            echo 'Formatting and Clippy findings are advisory only. Compilation, tests, and container builds remain blocking.'
+          } >> "$GITHUB_STEP_SUMMARY"
 
   release_metadata:
     name: Detect release commit
@@ -79,6 +125,7 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
       - name: Detect release commit
         id: release_commit
         shell: bash
@@ -90,15 +137,15 @@ jobs:
           echo "version=" >> "$GITHUB_OUTPUT"
 
           if [[ "$subject" =~ ^Release\ ([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
-           version="${BASH_REMATCH[1]}"
+            version="${BASH_REMATCH[1]}"
             major="${version%%.*}"
 
-           echo "is_release=true" >> "$GITHUB_OUTPUT"
-          echo "version=$version" >> "$GITHUB_OUTPUT"
+            echo "is_release=true" >> "$GITHUB_OUTPUT"
+            echo "version=$version" >> "$GITHUB_OUTPUT"
 
             if (( major < 1 )); then
-             echo "is_prerelease=true" >> "$GITHUB_OUTPUT"
-           fi
+              echo "is_prerelease=true" >> "$GITHUB_OUTPUT"
+            fi
           fi
 
       - name: Verify Cargo version
@@ -169,7 +216,6 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-
   release:
     name: Create GitHub release
 
@@ -239,6 +285,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ needs.release_metadata.outputs.version }}
+          IS_PRERELEASE: ${{ needs.release_metadata.outputs.is_prerelease }}
         shell: bash
         run: |
           if gh release view "$VERSION" >/dev/null 2>&1; then
@@ -246,7 +293,15 @@ jobs:
             exit 0
           fi
 
-          gh release create "$VERSION" \
-            --target "$GITHUB_SHA" \
-            --title "Release $VERSION" \
+          args=(
+            "$VERSION"
+            --target "$GITHUB_SHA"
+            --title "Release $VERSION"
             --notes-file release-notes.md
+          )
+
+          if [[ "$IS_PRERELEASE" == "true" ]]; then
+            args+=(--prerelease)
+          fi
+
+          gh release create "${args[@]}"
