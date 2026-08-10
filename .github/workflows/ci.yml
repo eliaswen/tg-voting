@@ -122,9 +122,9 @@ jobs:
           fi
 
   container:
-     name: Build and publish container
+    name: Build and publish container
 
-     needs:
+    needs:
       - test
       - release_metadata
 
@@ -132,8 +132,8 @@ jobs:
     runs-on: ubuntu-latest
 
     permissions:
-    contents: read
-    packages: write
+      contents: read
+      packages: write
 
     steps:
       - name: Checkout repository
