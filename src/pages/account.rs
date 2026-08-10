@@ -18,6 +18,11 @@ pub struct AccountThemeForm {
     theme: u8,
 }
 
+#[derive(Deserialize)]
+pub struct AccountRoleForm {
+    role: i64,
+}
+
 pub async fn get_account_page(State(state): State<AppState>, jar: CookieJar) -> impl IntoResponse {
     trace!("Handling account page request");
     let session_token = match jar.get("session") {
@@ -32,7 +37,7 @@ pub async fn get_account_page(State(state): State<AppState>, jar: CookieJar) -> 
 
     trace!("Retrieving account details");
     let query = sqlx::query(
-        "SELECT citizens.id AS citizen_id, authentik_identities.preferred_username, authentik_identities.email, authentik_identities.display_name,
+        "SELECT citizens.id AS citizen_id, citizens.role, authentik_identities.preferred_username, authentik_identities.email, authentik_identities.display_name,
                 COALESCE(user_setting.setting_value, '0') AS theme
         FROM sessions
         JOIN authentik_identities
@@ -54,6 +59,7 @@ pub async fn get_account_page(State(state): State<AppState>, jar: CookieJar) -> 
             let username: String = row.try_get("preferred_username").unwrap_or_default();
             let email: String = row.try_get("email").unwrap_or_default();
             let display_name: String = row.try_get("display_name").unwrap_or_default();
+            let role: i64 = row.get("role");
             let theme = row
                 .try_get::<String, _>("theme")
                 .unwrap_or_else(|_| "0".to_string())
@@ -138,8 +144,22 @@ pub async fn get_account_page(State(state): State<AppState>, jar: CookieJar) -> 
                 .replace("$${{username}}", &html_escape(&username))
                 .replace("$${{email}}", &html_escape(&email))
                 .replace("$${{display_name}}", &html_escape(&display_name))
+                .replace("$${{role}}", &role.to_string())
                 .replace("$${{current_theme}}", theme_name(theme))
                 .replace("$${{theme_options}}", &theme_options(theme))
+                .replace(
+                    "$${{role_section}}",
+                    if state.app_mode == 1 {
+                        include_str!(concat!(
+                            env!("CARGO_MANIFEST_DIR"),
+                            "/static/account/role-form.html"
+                        ))
+                        .replace("$${{current_role}}", &role.to_string())
+                    } else {
+                        String::new()
+                    }
+                    .as_str(),
+                )
                 .replace("$${{session_items}}", &session_items)
                 .replace(
                     "$${{sessions_empty_hidden}}",
@@ -354,6 +374,74 @@ pub async fn post_account_theme(
                     include_str!(concat!(
                         env!("CARGO_MANIFEST_DIR"),
                         "/static/account/theme-error.html"
+                    ))
+                    .to_string(),
+                ),
+            )
+                .into_response()
+        }
+    }
+}
+
+pub async fn post_account_role(
+    State(state): State<AppState>,
+    jar: CookieJar,
+    Form(form): Form<AccountRoleForm>,
+) -> Response {
+    trace!(role = form.role, "Handling account role update");
+    if state.app_mode != 1 {
+        warn!(role = form.role, app_mode = state.app_mode, "Rejected account role update outside staging mode");
+        return (
+            StatusCode::FORBIDDEN,
+            Html(
+                include_str!(concat!(
+                    env!("CARGO_MANIFEST_DIR"),
+                    "/static/errors/forbidden.html"
+                ))
+                .to_string(),
+            ),
+        )
+            .into_response();
+    }
+    let Some(session_token) = jar.get("session").map(|cookie| cookie.value().to_string()) else {
+        debug!(role = form.role, "Redirecting account role update without a session");
+        return Redirect::to("/login").into_response();
+    };
+    let query = sqlx::query(
+        "WITH current_session AS (
+             SELECT associated_citizen_id
+             FROM sessions
+             WHERE auth_code_hash = $2
+             AND expires_at > CURRENT_TIMESTAMP
+             AND revoked_at IS NULL
+         )
+         UPDATE citizens
+         SET role = $1
+         FROM current_session
+         WHERE citizens.id = current_session.associated_citizen_id",
+    )
+    .bind(form.role)
+    .bind(crate::backend::login_oauth::hash_token(&session_token))
+    .execute(&state.pool)
+    .await;
+
+    match query {
+        Ok(result) if result.rows_affected() == 1 => {
+            info!(role = form.role, "Saved account role");
+            Redirect::to("/account").into_response()
+        }
+        Ok(result) => {
+            warn!(rows_affected = result.rows_affected(), role = form.role, "Account role update did not resolve an active session");
+            Redirect::to("/login").into_response()
+        }
+        Err(error) => {
+            error!(?error, "Failed to save account role");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Html(
+                    include_str!(concat!(
+                        env!("CARGO_MANIFEST_DIR"),
+                        "/static/account/role-error.html"
                     ))
                     .to_string(),
                 ),

@@ -78,6 +78,7 @@ pub async fn get_homepage(State(state): State<AppState>, jar: CookieJar) -> Resp
         season,
         election_name,
         election_status,
+        staging_notice_hidden
     ) = if let Some(election) = elections.first() {
         let uuid: uuid::Uuid = election.get("uuid");
         trace!(election_uuid = %uuid, "Rendering latest election homepage state");
@@ -88,6 +89,11 @@ pub async fn get_homepage(State(state): State<AppState>, jar: CookieJar) -> Resp
             election.get::<i32, _>("season").to_string(),
             html_escape(election.get("name")),
             html_escape(election.get("status")),
+            if state.app_mode == 1 {
+                ""
+            } else {
+                "hidden"
+            }
         )
     } else {
         trace!("Rendering homepage without a visible election");
@@ -98,6 +104,11 @@ pub async fn get_homepage(State(state): State<AppState>, jar: CookieJar) -> Resp
             String::new(),
             String::new(),
             String::new(),
+            if state.app_mode == 1 {
+                ""
+            } else {
+                "hidden"
+            }
         )
     };
     let content = include_str!(concat!(
@@ -114,7 +125,8 @@ pub async fn get_homepage(State(state): State<AppState>, jar: CookieJar) -> Resp
     .replace("$${{election_uuid}}", &election_uuid)
     .replace("$${{season}}", &season)
     .replace("$${{election_name}}", &election_name)
-    .replace("$${{election_status}}", &election_status);
+    .replace("$${{election_status}}", &election_status)
+    .replace("$${{staging_notice_hidden}}", staging_notice_hidden);
     trace!("Rendering homepage");
     render_page(&content, "Home", jar, &state.pool)
         .await

@@ -77,6 +77,9 @@ pub struct AppState {
     pub public_host: String,
     #[from_ref(skip)]
     pub http_client: Client,
+    #[from_ref(skip)]
+    // app_mode: 0 = development, 1 = staging, 2 = production
+    pub app_mode: u8,
 }
 
 pub async fn get_login(State(state): State<AppState>, jar: CookieJar) -> impl IntoResponse {
@@ -84,6 +87,10 @@ pub async fn get_login(State(state): State<AppState>, jar: CookieJar) -> impl In
         session_present = jar.get("session").is_some(),
         "Handling login page request"
     );
+    if state.app_mode == 1 {
+        trace!("Login page requested in staging mode, ignoring login logic and logging in user automatically.");
+    }
+
     let session_token = match jar.get("session").map(|c| c.value().to_string()) {
         Some(token) => token,
         None => {

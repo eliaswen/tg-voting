@@ -470,6 +470,7 @@ mod tests {
             oauth_scope: "openid profile email".to_string(),
             public_host: "http://localhost".to_string(),
             http_client: Client::new(),
+            app_mode: 2,
         }
     }
 

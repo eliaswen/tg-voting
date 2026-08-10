@@ -15,7 +15,7 @@ pub use crate::backend::tasks::login_threads;
 
 pub use account::{
     get_account_page, post_account_theme, post_delete_account_session,
-    post_delete_all_account_sessions,
+        post_account_role, post_delete_all_account_sessions,
 };
 pub use candidates::{
     get_candidate_registration, get_election_candidates, post_candidate_registration,
@@ -24,7 +24,7 @@ pub use candidates::{
 pub use debug::{get_debug, post_debug};
 pub use elections::get_elections;
 pub use homepage::get_homepage;
-pub use info::{get_about, get_contact};
+pub use info::{get_about, get_contact, get_staging};
 pub use login::{
     get_login, get_login_oauth, get_login_oauth_callback, get_login_oauth_complete,
     get_login_oauth_device, get_login_oauth_manual_check, get_login_oauth_status, get_logout,

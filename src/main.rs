@@ -28,10 +28,10 @@ use pages::{
     get_list_themes_page, get_login, get_login_oauth, get_login_oauth_callback,
     get_login_oauth_complete, get_login_oauth_device, get_login_oauth_manual_check,
     get_login_oauth_status, get_logout, get_manage_election_status, get_manage_elections,
-    get_settings, get_userinfo, login_threads, post_account_theme, post_candidate_registration,
+        get_settings, get_userinfo, login_threads, post_account_role, post_account_theme, post_candidate_registration,
     post_debug, post_delete_account_session, post_delete_all_account_sessions, post_edit_election,
     post_election_status, post_manage_council_candidate, post_manage_elections,
-    post_manage_presidential_ticket, post_settings, post_withdraw_candidate, get_contact,
+    post_manage_presidential_ticket, post_settings, post_withdraw_candidate, get_contact, get_staging
 };
 
 #[tokio::main]
@@ -116,6 +116,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
 
+    let app_mode = match env::var("APP_MODE") {
+        Ok(mode) => match mode.parse::<u8>() {
+            Ok(num) if num <= 2 => num,
+            _ => {
+                warn!("APP_MODE is set to an invalid value, defaulting to 2 (production)");
+                warn!("It is recommended to set APP_MODE for a more predictable behavior.");
+                warn!("Valid values for APP_MODE are: 0 = development, 1 = staging, 2 = production");
+                2
+            }
+        },
+        Err(_) => {
+            warn!("APP_MODE is not set, defaulting to 2 (production)");
+            warn!("It is recommended to set APP_MODE for a more predictable behavior.");
+            warn!("Valid values for APP_MODE are: 0 = development, 1 = staging, 2 = production");
+            2
+        }
+    };
+
     let state = AppState {
         pool,
         pending_logins: Arc::new(Mutex::new(HashMap::new())),
@@ -129,6 +147,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         oauth_scope: oauth_info.scope,
         public_host: oauth_info.public_host,
         http_client: reqwest::Client::new(),
+        app_mode
     };
     debug!(
         device_login_configured = state.oauth_device_authorization_url.is_some(),
@@ -146,14 +165,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         error!(?error, "Webserver stopped with an error");
         return Err(error.into());
     }
-    info!("Webserver stopped");
 
     Ok(())
 }
 
 async fn build_router(state: AppState) -> Router {
     trace!("Building application router");
-    Router::new()
+    let mut router = Router::new()
         .route("/", get(get_homepage))
         .route("/about", get(get_about))
         .route("/elections", get(get_elections))
@@ -175,9 +193,9 @@ async fn build_router(state: AppState) -> Router {
         )
         .route("/logout", post(get_logout))
         .route("/userinfo", get(get_userinfo))
-        .route("/debug/{path}", get(get_debug).post(post_debug))
         .route("/account", get(get_account_page))
         .route("/account/set-theme", post(post_account_theme))
+            .route("/account/set-role", post(post_account_role))
         .route(
             "/account/sessions/{session_uuid}/delete",
             post(post_delete_account_session),
@@ -225,9 +243,16 @@ async fn build_router(state: AppState) -> Router {
         .route("/contact", get(get_contact))
         .route("/themes", get(get_list_themes_page))
         .route("/settings", get(get_settings).post(post_settings))
+        .route("/staging", get(get_staging))
         .fallback(error_not_found)
-        .layer(middleware::from_fn(log_request))
-        .with_state(state)
+        .layer(middleware::from_fn(log_request));
+
+    if state.app_mode == 0 {
+        trace!("Adding debug routes for development mode");
+        router = router.route("/debug/{path}", get(get_debug).post(post_debug))
+    }
+
+    router.with_state(state)
 }
 
 async fn log_request(request: Request, next: Next) -> Response {
