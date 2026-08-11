@@ -87,9 +87,6 @@ pub async fn get_login(State(state): State<AppState>, jar: CookieJar) -> impl In
         session_present = jar.get("session").is_some(),
         "Handling login page request"
     );
-    if state.app_mode == 1 {
-        trace!("Login page requested in staging mode, ignoring login logic and logging in user automatically.");
-    }
 
     let session_token = match jar.get("session").map(|c| c.value().to_string()) {
         Some(token) => token,

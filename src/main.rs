@@ -36,7 +36,7 @@ use pages::{
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let dotenv_loaded = dotenv::dotenv().is_ok();
+    let dotenv_result = dotenv::dotenv();
 
     let level = env::var("LOG_LEVEL").unwrap_or_else(|_| "info".to_string());
 
@@ -48,7 +48,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     tracing_subscriber::fmt().with_env_filter(filter).init();
 
-    trace!(%level, dotenv_loaded, "Logging system initialised");
+    match dotenv_result {
+        Ok(path) => debug!(path = %path.display(), "Environment file loaded"),
+        Err(error) => debug!(%error, "Environment file not loaded; using process environment"),
+    }
+
+    trace!(%level, "Logging system initialised");
 
     info!("Starting tg-voting server version {}", get_version());
 
@@ -133,6 +138,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             2
         }
     };
+
+    info!(app_mode, "Application mode resolved");
 
     let state = AppState {
         pool,
