@@ -1,5 +1,11 @@
 <section id="candidates-page" class="page candidates-page election-candidates-page">
     <h1 id="candidates-title" class="page-title candidates-title">$${{election_name}} candidates</h1>
+    <form id="candidates-search-form" class="search-form candidates-search-form" method="get" action="/elections/$${{election_uuid}}/candidates">
+<label id="candidates-search-label" class="form-label search-label" for="candidates-search-input">Search candidates</label>
+<input id="candidates-search-input" class="form-control search-input" type="search" name="q" value="$${{search_query}}" placeholder="Candidate or party">
+<button id="candidates-search-submit" class="form-button search-button" type="submit">Search</button>
+<a id="candidates-search-clear" class="navigation-link clear-search-link" href="/elections/$${{election_uuid}}/candidates">Clear</a>
+</form>
     <section id="presidential-candidates-section" class="page-section candidates-section presidential-candidates-section">
 <h2 id="presidential-candidates-title" class="section-title candidates-section-title">President</h2>
 <ul id="presidential-candidates-list" class="item-list candidates-list presidential-candidates-list">$${{presidential_candidates}}<li id="presidential-candidates-empty" class="item empty-state candidates-empty-state" $${{presidential_empty_hidden}}>No presidential tickets are currently registered.</li>
@@ -11,6 +17,6 @@
 </ul>
 </section>
     <nav id="candidates-navigation" class="page-navigation candidates-navigation">
-<a id="candidates-registration-link" class="navigation-link registration-link" href="/elections/$${{election_uuid}}/register">Register or manage my candidacy</a> | <a id="candidates-changes-link" class="navigation-link changes-link" href="/elections/$${{election_uuid}}/changes">Election change log</a> | <a id="candidates-elections-link" class="navigation-link elections-link" href="/elections">All elections</a>
+<a id="candidates-overview-link" class="navigation-link election-link" href="/elections/$${{election_uuid}}">Election overview</a> | <a id="candidates-registration-link" class="navigation-link registration-link" href="/elections/$${{election_uuid}}/register">Register or manage my candidacy</a> | <a id="candidates-changes-link" class="navigation-link changes-link" href="/elections/$${{election_uuid}}/changes">Election change log</a> | <a id="candidates-elections-link" class="navigation-link elections-link" href="/elections">All elections</a>
 </nav>
 </section>

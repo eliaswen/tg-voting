@@ -1,0 +1,25 @@
+<section id="election-page" class="page elections-page election-overview-page">
+<header id="election-header" class="page-header election-header">
+<p id="election-season" class="page-kicker election-season">Season $${{season}}</p>
+<h1 id="election-title" class="page-title election-title">$${{name}}</h1>
+<p id="election-status" class="status-message election-status">Current status: <strong id="election-status-value" class="status-value">$${{status}}</strong></p>
+</header>
+<section id="election-schedule" class="page-section election-section election-schedule-section">
+<h2 id="election-schedule-title" class="section-title election-section-title">Schedule</h2>
+<dl id="election-schedule-list" class="detail-list election-schedule-list">
+<dt id="election-registration-start-label" class="detail-label">Registration starts</dt><dd id="election-registration-start-value" class="detail-value">$${{registration_starts_at}}</dd>
+<dt id="election-registration-end-label" class="detail-label">Registration ends</dt><dd id="election-registration-end-value" class="detail-value">$${{registration_ends_at}}</dd>
+<dt id="election-voting-start-label" class="detail-label">Voting starts</dt><dd id="election-voting-start-value" class="detail-value">$${{voting_starts_at}}</dd>
+<dt id="election-voting-end-label" class="detail-label">Voting ends</dt><dd id="election-voting-end-value" class="detail-value">$${{voting_ends_at}}</dd>
+</dl>
+</section>
+<nav id="election-actions" class="page-section election-section election-actions">
+<h2 id="election-actions-title" class="section-title election-section-title">Election pages</h2>
+<ul id="election-actions-list" class="item-list election-actions-list">
+<li id="election-candidates-item" class="item election-action-item"><a id="election-candidates-link" class="navigation-link candidates-link" href="/elections/$${{election_uuid}}/candidates">View candidates</a></li>
+<li id="election-changes-item" class="item election-action-item"><a id="election-changes-link" class="navigation-link changes-link" href="/elections/$${{election_uuid}}/changes">View change log</a></li>
+<li id="election-register-item" class="item election-action-item" $${{registration_hidden}}><a id="election-register-link" class="navigation-link registration-link" href="/elections/$${{election_uuid}}/register">Register or manage candidacy</a></li>
+</ul>
+</nav>
+<nav id="election-navigation" class="page-navigation elections-navigation"><a id="election-back-link" class="navigation-link back-link" href="/elections">Back to all elections</a></nav>
+</section>

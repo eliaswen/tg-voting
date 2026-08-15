@@ -8,9 +8,6 @@
         <p id="homepage-account-banned" class="status-message account-status account-banned" $${{account_banned_hidden}}>Your account is unavailable.</p>
         <div id="homepage-account-logged-in" class="account-state account-logged-in" $${{account_logged_in_hidden}}>
             <p id="homepage-account-welcome" class="status-message account-status account-welcome">Welcome back, <span id="homepage-account-name" class="account-name">$${{display_name}}</span>. <a id="homepage-account-link" class="navigation-link account-link" href="/account">View your account</a>.</p>
-            <p id="homepage-management-navigation" class="page-navigation management-navigation" $${{management_hidden}}>
-<a id="homepage-management-link" class="navigation-link management-link" href="/manage/elections">Manage elections</a>
-</p>
         </div>
         <p id="homepage-account-login" class="status-message account-status account-login" $${{account_logged_out_hidden}}>
 <a id="homepage-login-link" class="navigation-link login-link" href="/login">Log in</a> to register as a candidate or manage an election.</p>
@@ -27,6 +24,7 @@
             <p id="homepage-election-status" class="election-status">Status: <span id="homepage-election-status-value" class="status-value">$${{election_status}}</span>
 </p>
             <nav id="homepage-election-links" class="election-navigation">
+                <a id="homepage-election-overview" class="navigation-link election-link" href="/elections/$${{election_uuid}}">View election</a> |
                 <a id="homepage-election-candidates" class="navigation-link candidates-link" href="/elections/$${{election_uuid}}/candidates">View candidates</a> |
                 <a id="homepage-election-changes" class="navigation-link changes-link" href="/elections/$${{election_uuid}}/changes">View change log</a>
             </nav>

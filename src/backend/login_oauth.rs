@@ -290,7 +290,7 @@ async fn complete_oauth_token(
     let session_token = uuid::Uuid::new_v4().to_string();
     trace!("Starting OAuth login database transaction");
     let mut transaction = state.pool.begin().await?;
-    let citizen_id = sqlx::query_scalar::<_, i64>(
+    let citizen_id = sqlx::query_scalar::<_, uuid::Uuid>(
         "SELECT citizen_id FROM authentik_identities WHERE issuer = $1 AND subject = $2",
     )
     .bind(&state.oauth_issuer)
@@ -299,19 +299,20 @@ async fn complete_oauth_token(
     .await?;
     let citizen_id = match citizen_id {
         Some(citizen_id) => {
-            trace!(citizen_id, "Found citizen for OAuth identity");
+            trace!(%citizen_id, "Found citizen for OAuth identity");
             citizen_id
         }
         None => {
-            let citizen_id = sqlx::query_scalar("INSERT INTO citizens DEFAULT VALUES RETURNING id")
-                .fetch_one(&mut *transaction)
-                .await?;
-            info!(citizen_id, "Created citizen for OAuth identity");
+            let citizen_id =
+                sqlx::query_scalar("INSERT INTO citizens DEFAULT VALUES RETURNING uuid")
+                    .fetch_one(&mut *transaction)
+                    .await?;
+            info!(%citizen_id, "Created citizen for OAuth identity");
             citizen_id
         }
     };
 
-    let citizen_id: i64 = sqlx::query_scalar(
+    let citizen_id: uuid::Uuid = sqlx::query_scalar(
         "INSERT INTO authentik_identities (citizen_id, issuer, subject, preferred_username, email, display_name, last_authenticated_at)
          VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP)
          ON CONFLICT (issuer, subject) DO UPDATE
@@ -328,7 +329,7 @@ async fn complete_oauth_token(
     .bind(user.email)
     .bind(user.name)
     .fetch_one(&mut *transaction).await?;
-    debug!(citizen_id, "Updated OAuth identity");
+    debug!(%citizen_id, "Updated OAuth identity");
 
     sqlx::query(
         "INSERT INTO sessions (associated_citizen_id, auth_code_hash, expires_at, device_type, device_name, oauth_access_token, oauth_refresh_token, oauth_token_expires_at)
@@ -344,7 +345,7 @@ async fn complete_oauth_token(
     .bind(token.expires_in.map(|seconds| Utc::now() + TimeDelta::seconds(seconds)))
     .execute(&mut *transaction).await?;
     transaction.commit().await?;
-    info!(citizen_id, device_type = %device.device_type, device_name = %device.device_name, "Created authenticated session");
+    info!(%citizen_id, device_type = %device.device_type, device_name = %device.device_name, "Created authenticated session");
     Ok(session_token)
 }
 
@@ -471,6 +472,8 @@ mod tests {
             public_host: "http://localhost".to_string(),
             http_client: Client::new(),
             app_mode: 2,
+            discord_client_id: None,
+            discord_client_secret: None,
         }
     }
 

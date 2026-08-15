@@ -92,8 +92,8 @@ CREATE TABLE authentik_identities (
     id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     uuid UUID NOT NULL UNIQUE DEFAULT gen_random_uuid(),
 
-    citizen_id BIGINT NOT NULL
-        REFERENCES citizens(id)
+    citizen_id UUID NOT NULL
+        REFERENCES citizens(uuid)
         ON DELETE CASCADE,
 
     issuer TEXT NOT NULL,
@@ -126,8 +126,8 @@ CREATE TABLE citizen_discord_links (
     id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     uuid UUID NOT NULL UNIQUE DEFAULT gen_random_uuid(),
 
-    citizen_id BIGINT NOT NULL
-        REFERENCES citizens(id)
+    citizen_id UUID NOT NULL
+        REFERENCES citizens(uuid)
         ON DELETE CASCADE,
 
     discord_user_id TEXT NOT NULL,
@@ -159,8 +159,8 @@ CREATE TABLE citizen_reddit_links (
     id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     uuid UUID NOT NULL UNIQUE DEFAULT gen_random_uuid(),
 
-    citizen_id BIGINT NOT NULL
-        REFERENCES citizens(id)
+    citizen_id UUID NOT NULL
+        REFERENCES citizens(uuid)
         ON DELETE CASCADE,
 
     reddit_username TEXT NOT NULL,
@@ -168,8 +168,8 @@ CREATE TABLE citizen_reddit_links (
     verified_at TIMESTAMPTZ,
     verification_method TEXT,
 
-    verified_by_citizen_id BIGINT
-        REFERENCES citizens(id)
+    verified_by_citizen_id UUID
+        REFERENCES citizens(uuid)
         ON DELETE SET NULL,
 
     database_created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -241,8 +241,8 @@ CREATE TABLE election_voters (
         REFERENCES elections(id)
         ON DELETE CASCADE,
 
-    citizen_id BIGINT NOT NULL
-        REFERENCES citizens(id)
+    citizen_id UUID NOT NULL
+        REFERENCES citizens(uuid)
         ON DELETE RESTRICT,
 
     credential_issued BOOLEAN NOT NULL DEFAULT FALSE,
@@ -263,8 +263,8 @@ ON election_voters (citizen_id);
 CREATE TABLE voting_codes (
     uuid UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 
-    election_id BIGINT NOT NULL
-        REFERENCES elections(id)
+    election_id UUID NOT NULL
+        REFERENCES elections(uuid)
         ON DELETE CASCADE,
 
     -- Store an expensive password-style hash of the code.
@@ -290,12 +290,12 @@ CREATE TABLE candidates (
     id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     uuid UUID NOT NULL UNIQUE DEFAULT gen_random_uuid(),
 
-    election_id BIGINT NOT NULL
-        REFERENCES elections(id)
+    election_id UUID NOT NULL
+        REFERENCES elections(uuid)
         ON DELETE CASCADE,
 
-    citizen_id BIGINT NOT NULL
-        REFERENCES citizens(id)
+    citizen_id UUID NOT NULL
+        REFERENCES citizens(uuid)
         ON DELETE RESTRICT,
 
     position candidate_position NOT NULL,
@@ -338,16 +338,16 @@ CREATE TABLE presidential_tickets (
     id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     uuid UUID NOT NULL UNIQUE DEFAULT gen_random_uuid(),
 
-    election_id BIGINT NOT NULL
-        REFERENCES elections(id)
+    election_id UUID NOT NULL
+        REFERENCES elections(uuid)
         ON DELETE CASCADE,
 
-    president_candidate_id BIGINT NOT NULL
-        REFERENCES candidates(id)
+    president_candidate_id UUID NOT NULL
+        REFERENCES candidates(uuid)
         ON DELETE RESTRICT,
 
-    vice_president_candidate_id BIGINT NOT NULL
-        REFERENCES candidates(id)
+    vice_president_candidate_id UUID NOT NULL
+        REFERENCES candidates(uuid)
         ON DELETE RESTRICT,
 
     status registration_status NOT NULL DEFAULT 'active',
@@ -383,8 +383,8 @@ EXECUTE FUNCTION set_database_updated_at();
 CREATE TABLE presidential_ticket_messages (
     id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
 
-    presidential_ticket_id BIGINT NOT NULL
-        REFERENCES presidential_tickets(id)
+    presidential_ticket_id UUID NOT NULL
+        REFERENCES presidential_tickets(uuid)
         ON DELETE CASCADE,
 
     position INTEGER NOT NULL,
@@ -404,12 +404,12 @@ CREATE TABLE election_change_log (
     id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     uuid UUID NOT NULL UNIQUE DEFAULT gen_random_uuid(),
 
-    election_id BIGINT NOT NULL
-        REFERENCES elections(id)
+    election_id UUID NOT NULL
+        REFERENCES elections(uuid)
         ON DELETE CASCADE,
 
-    actor_citizen_id BIGINT NOT NULL
-        REFERENCES citizens(id)
+    actor_citizen_id UUID NOT NULL
+        REFERENCES citizens(uuid)
         ON DELETE RESTRICT,
 
     actor_display_name TEXT NOT NULL,
@@ -437,8 +437,8 @@ ON election_change_log (election_id, database_created_at, id);
 CREATE TABLE ballots (
     uuid UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 
-    election_id BIGINT NOT NULL
-        REFERENCES elections(id)
+    election_id UUID NOT NULL
+        REFERENCES elections(uuid)
         ON DELETE RESTRICT,
 
     authorization_hash BYTEA NOT NULL,
@@ -463,8 +463,8 @@ CREATE TABLE presidential_votes (
         REFERENCES ballots(uuid)
         ON DELETE CASCADE,
 
-    ticket_id BIGINT NOT NULL
-        REFERENCES presidential_tickets(id)
+    ticket_id UUID NOT NULL
+        REFERENCES presidential_tickets(uuid)
         ON DELETE RESTRICT
 );
 
@@ -483,8 +483,8 @@ CREATE TABLE council_votes (
         REFERENCES ballots(uuid)
         ON DELETE CASCADE,
 
-    candidate_id BIGINT NOT NULL
-        REFERENCES candidates(id)
+    candidate_id UUID NOT NULL
+        REFERENCES candidates(uuid)
         ON DELETE RESTRICT,
 
     ranking INTEGER NOT NULL,
@@ -508,8 +508,8 @@ CREATE TABLE sessions (
     id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     uuid UUID NOT NULL UNIQUE DEFAULT gen_random_uuid(),
 
-    associated_citizen_id BIGINT NOT NULL
-        REFERENCES citizens(id)
+    associated_citizen_id UUID NOT NULL
+        REFERENCES citizens(uuid)
         ON DELETE CASCADE,
 
     auth_code_hash BYTEA NOT NULL UNIQUE,

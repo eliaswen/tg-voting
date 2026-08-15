@@ -80,6 +80,10 @@ pub struct AppState {
     #[from_ref(skip)]
     // app_mode: 0 = development, 1 = staging, 2 = production
     pub app_mode: u8,
+    #[from_ref(skip)]
+    pub discord_client_id: Option<String>,
+    #[from_ref(skip)]
+    pub discord_client_secret: Option<String>,
 }
 
 pub async fn get_login(State(state): State<AppState>, jar: CookieJar) -> impl IntoResponse {
@@ -460,7 +464,7 @@ pub async fn get_login_oauth_complete(
             let theme = sqlx::query_scalar::<_, String>(
                 "SELECT user_setting.setting_value
                  FROM sessions
-                 JOIN citizens ON citizens.id = sessions.associated_citizen_id
+                 JOIN citizens ON citizens.uuid = sessions.associated_citizen_id
                  JOIN user_setting ON user_setting.user_uuid = citizens.uuid AND user_setting.setting_key = 'theme'
                  WHERE sessions.auth_code_hash = $1",
             )
@@ -469,7 +473,7 @@ pub async fn get_login_oauth_complete(
             .await
             .ok()
             .flatten();
-            if let Some(theme) = theme.filter(|theme| theme == "0") {
+            if let Some(theme) = theme.filter(|theme| matches!(theme.as_str(), "0" | "1" | "2")) {
                 trace!(%request_id, theme = %theme, "Applying saved account theme to login response");
                 headers.append(
                     header::SET_COOKIE,
@@ -560,7 +564,8 @@ pub async fn get_userinfo(State(state): State<AppState>, jar: CookieJar) -> impl
     let citizen = sqlx::query(
         "SELECT authentik_identities.preferred_username, authentik_identities.email, authentik_identities.display_name
         FROM sessions
-        JOIN authentik_identities ON authentik_identities.citizen_id = sessions.associated_citizen_id
+        JOIN citizens ON citizens.uuid = sessions.associated_citizen_id
+        JOIN authentik_identities ON authentik_identities.citizen_id = citizens.uuid
         WHERE sessions.auth_code_hash = $1
         AND sessions.expires_at > CURRENT_TIMESTAMP
         AND sessions.revoked_at IS NULL"

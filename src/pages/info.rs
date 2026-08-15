@@ -39,8 +39,13 @@ pub async fn get_contact(State(state): State<AppState>, jar: CookieJar) -> impl 
 pub async fn get_staging(State(state): State<AppState>, jar: CookieJar) -> impl IntoResponse {
     trace!("Handling staging page request");
     if state.app_mode != 1 {
-        trace!(app_mode = state.app_mode, "Staging page requested outside staging mode, returning 404");
-        return crate::error_handling::error_not_found().await.into_response();
+        trace!(
+            app_mode = state.app_mode,
+            "Staging page requested outside staging mode, returning 404"
+        );
+        return crate::error_handling::error_not_found()
+            .await
+            .into_response();
     }
     trace!("Staging page requested in staging mode, returning staging information page");
     render_page(

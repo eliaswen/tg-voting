@@ -1,10 +1,17 @@
 <section id="edit-election-page" class="page manage-page edit-election-page">
+    <header id="edit-election-header" class="page-header manage-header election-header edit-election-header">
+    <p id="edit-election-context" class="page-context election-context"><a id="edit-election-dashboard-link" class="navigation-link back-link" href="/manage/elections/$${{election_uuid}}">Election dashboard</a></p>
     <h1 id="edit-election-title" class="page-title manage-title">Edit season $${{season}}</h1>
+    <p id="edit-election-description" class="page-description manage-description">Update the election name, schedule, and council voting limit. Candidate and election status changes are managed from their own pages.</p>
+    </header>
+    <section id="edit-election-form-section" class="page-section manage-section election-section edit-election-form-section">
+    <h2 id="edit-election-form-title" class="section-title manage-section-title">Election details and schedule</h2>
     <form id="edit-election-form" class="manage-form election-form" method="post" action="/manage/elections/$${{election_uuid}}/edit">
         $${{election_fields}}
         <button id="edit-election-submit" class="form-button submit-button" type="submit">Save election</button>
     </form>
+    </section>
     <nav id="edit-election-navigation" class="page-navigation manage-navigation">
-<a id="edit-election-back-link" class="navigation-link back-link" href="/manage/elections">Back to elections</a>
+<a id="edit-election-back-link" class="navigation-link back-link" href="/manage/elections/$${{election_uuid}}">Back to election dashboard</a>
 </nav>
 </section>

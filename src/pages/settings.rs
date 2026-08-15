@@ -21,7 +21,7 @@ pub async fn get_settings(State(state): State<AppState>, jar: CookieJar) -> Resp
     let theme = jar
         .get("theme")
         .and_then(|cookie| cookie.value().parse().ok())
-        .unwrap_or(0);
+        .unwrap_or(1);
     debug!(theme, "Rendering local settings");
     let content = include_str!(concat!(
         env!("CARGO_MANIFEST_DIR"),
@@ -36,7 +36,7 @@ pub async fn get_settings(State(state): State<AppState>, jar: CookieJar) -> Resp
 
 pub async fn post_settings(Form(form): Form<ThemeForm>) -> Response {
     trace!(theme = form.theme, "Handling local theme update");
-    if form.theme != 0 {
+    if form.theme > 2 {
         warn!(theme = form.theme, "Rejected unknown local theme");
         return (
             StatusCode::BAD_REQUEST,

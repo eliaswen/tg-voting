@@ -1,6 +1,6 @@
 use axum::{
     Form,
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
     response::{Html, IntoResponse, Redirect, Response},
 };
@@ -27,7 +27,17 @@ pub struct ElectionForm {
     maximum_council_choices: i32,
 }
 
-pub async fn get_manage_elections(State(state): State<AppState>, jar: CookieJar) -> Response {
+#[derive(Deserialize, Default)]
+pub struct ManageElectionSearch {
+    #[serde(default)]
+    q: String,
+}
+
+pub async fn get_manage_elections(
+    State(state): State<AppState>,
+    jar: CookieJar,
+    Query(search): Query<ManageElectionSearch>,
+) -> Response {
     trace!("Handling election management page request");
     if let Err(response) = require_election_manager(&state, &jar).await {
         return response;
@@ -36,8 +46,10 @@ pub async fn get_manage_elections(State(state): State<AppState>, jar: CookieJar)
     let elections = sqlx::query(
         "SELECT uuid, season, name, status::text AS status
          FROM elections
+         WHERE $1 = '%%' OR name ILIKE $1 OR season::text ILIKE $1 OR status::text ILIKE $1
          ORDER BY season DESC",
     )
+    .bind(format!("%{}%", search.q.trim()))
     .fetch_all(&state.pool)
     .await;
 
@@ -82,11 +94,113 @@ pub async fn get_manage_elections(State(state): State<AppState>, jar: CookieJar)
         env!("CARGO_MANIFEST_DIR"),
         "/static/manage-elections/manage-elections.html"
     ))
-    .replace("$${{election_fields}}", &election_fields(None))
+    .replace("$${{search_query}}", &html_escape(search.q.trim()))
     .replace("$${{election_items}}", &previous_elections)
     .replace("$${{empty_hidden}}", empty_hidden);
     trace!("Rendering election management page");
     render_page(&content, "Manage elections", jar, &state.pool)
+        .await
+        .into_response()
+}
+
+pub async fn get_new_election(State(state): State<AppState>, jar: CookieJar) -> Response {
+    trace!("Handling new election page request");
+    if let Err(response) = require_election_manager(&state, &jar).await {
+        return response;
+    }
+    let content = include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/static/manage-elections/new-election.html"
+    ))
+    .replace("$${{election_fields}}", &election_fields(None));
+    render_page(&content, "Create election", jar, &state.pool)
+        .await
+        .into_response()
+}
+
+pub async fn get_manage_election(
+    State(state): State<AppState>,
+    jar: CookieJar,
+    Path(election_uuid): Path<uuid::Uuid>,
+) -> Response {
+    trace!(%election_uuid, "Handling election management dashboard request");
+    if let Err(response) = require_election_manager(&state, &jar).await {
+        return response;
+    }
+    let election = match sqlx::query(
+        "SELECT season, name, status::text AS status,
+                COALESCE(to_char(registration_starts_at, 'YYYY-MM-DD HH24:MI TZ'), 'Not set') AS registration_starts_at,
+                COALESCE(to_char(registration_ends_at, 'YYYY-MM-DD HH24:MI TZ'), 'Not set') AS registration_ends_at,
+                COALESCE(to_char(voter_code_registration_starts_at, 'YYYY-MM-DD HH24:MI TZ'), 'Not set') AS voter_code_registration_starts_at,
+                COALESCE(to_char(voter_code_registration_ends_at, 'YYYY-MM-DD HH24:MI TZ'), 'Not set') AS voter_code_registration_ends_at,
+                COALESCE(to_char(voting_starts_at, 'YYYY-MM-DD HH24:MI TZ'), 'Not set') AS voting_starts_at,
+                COALESCE(to_char(voting_ends_at, 'YYYY-MM-DD HH24:MI TZ'), 'Not set') AS voting_ends_at,
+                maximum_council_choices
+         FROM elections WHERE uuid = $1",
+    )
+    .bind(election_uuid)
+    .fetch_optional(&state.pool)
+    .await
+    {
+        Ok(Some(election)) => election,
+        Ok(None) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Html(include_str!(concat!(
+                    env!("CARGO_MANIFEST_DIR"),
+                    "/static/manage-elections/not-found.html"
+                ))),
+            )
+                .into_response();
+        }
+        Err(error) => {
+            error!(?error, %election_uuid, "Failed to retrieve election management dashboard");
+            return server_error();
+        }
+    };
+    let content = include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/static/manage-elections/election-dashboard.html"
+    ))
+    .replace("$${{election_uuid}}", &election_uuid.to_string())
+    .replace(
+        "$${{season}}",
+        &election.get::<i32, _>("season").to_string(),
+    )
+    .replace("$${{name}}", &html_escape(election.get("name")))
+    .replace("$${{status}}", &html_escape(election.get("status")))
+    .replace(
+        "$${{registration_starts_at}}",
+        &html_escape(election.get("registration_starts_at")),
+    )
+    .replace(
+        "$${{registration_ends_at}}",
+        &html_escape(election.get("registration_ends_at")),
+    )
+    .replace(
+        "$${{voter_code_registration_starts_at}}",
+        &html_escape(election.get("voter_code_registration_starts_at")),
+    )
+    .replace(
+        "$${{voter_code_registration_ends_at}}",
+        &html_escape(election.get("voter_code_registration_ends_at")),
+    )
+    .replace(
+        "$${{voting_starts_at}}",
+        &html_escape(election.get("voting_starts_at")),
+    )
+    .replace(
+        "$${{voting_ends_at}}",
+        &html_escape(election.get("voting_ends_at")),
+    )
+    .replace(
+        "$${{maximum_council_choices}}",
+        &election
+            .get::<i32, _>("maximum_council_choices")
+            .to_string(),
+    );
+    debug!(%election_uuid, "Rendering election management dashboard");
+    render_page(&content, "Manage election", jar, &state.pool)
         .await
         .into_response()
 }
@@ -109,7 +223,7 @@ pub async fn post_manage_elections(
         return bad_request(message);
     }
 
-    let query = sqlx::query(
+    let query = sqlx::query_scalar::<_, uuid::Uuid>(
         "INSERT INTO elections (
             season, name,
             registration_starts_at, registration_ends_at,
@@ -120,7 +234,7 @@ pub async fn post_manage_elections(
             NULLIF($3, '')::timestamptz, NULLIF($4, '')::timestamptz,
             NULLIF($5, '')::timestamptz, NULLIF($6, '')::timestamptz,
             NULLIF($7, '')::timestamptz, NULLIF($8, '')::timestamptz, $9
-        )",
+        ) RETURNING uuid",
     )
     .bind(form.season)
     .bind(form.name.trim())
@@ -131,17 +245,17 @@ pub async fn post_manage_elections(
     .bind(&form.voting_starts_at)
     .bind(&form.voting_ends_at)
     .bind(form.maximum_council_choices)
-    .execute(&state.pool)
+    .fetch_one(&state.pool)
     .await;
 
     match query {
-        Ok(result) => {
+        Ok(election_uuid) => {
             info!(
                 season = form.season,
-                rows_affected = result.rows_affected(),
+                %election_uuid,
                 "Created election"
             );
-            Redirect::to("/manage/elections").into_response()
+            Redirect::to(&format!("/manage/elections/{election_uuid}")).into_response()
         }
         Err(error) => database_form_error(error),
     }
@@ -273,7 +387,7 @@ pub async fn post_edit_election(
     match query {
         Ok(result) if result.rows_affected() == 1 => {
             info!(%election_uuid, season = form.season, "Updated election");
-            Redirect::to("/manage/elections").into_response()
+            Redirect::to(&format!("/manage/elections/{election_uuid}")).into_response()
         }
         Ok(result) => {
             debug!(%election_uuid, rows_affected = result.rows_affected(), "Election update target was not found");

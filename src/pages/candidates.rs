@@ -1,6 +1,6 @@
 use axum::{
     Form,
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
     response::{Html, IntoResponse, Redirect, Response},
 };
@@ -36,6 +36,12 @@ pub struct CandidateForm {
     message_4: String,
     #[serde(default)]
     message_5: String,
+}
+
+#[derive(Deserialize, Default)]
+pub struct CandidateSearch {
+    #[serde(default)]
+    q: String,
 }
 
 struct CandidateRegistrationPage {
@@ -113,16 +119,16 @@ pub async fn get_candidate_registration(
         Ok(None) => return not_found(),
         Err(response) => return response,
     };
-    let election_id: i64 = election.get("id");
+    let election_id: uuid::Uuid = election.get("id");
     let registration_open: bool = election.get("registration_open");
-    debug!(%election_uuid, election_id, citizen_id = citizen.id, registration_open, "Loaded candidate registration context");
+    debug!(%election_uuid, %election_id, citizen_id = citizen.id, registration_open, "Loaded candidate registration context");
 
     let candidate = match sqlx::query(
-        "SELECT id, position::text AS position, election_display_name, party, status::text AS status
+        "SELECT uuid AS id, position::text AS position, election_display_name, party, status::text AS status
          FROM candidates WHERE election_id = $1 AND citizen_id = $2 AND status = 'active'",
     )
     .bind(election_id)
-    .bind(citizen.id)
+    .bind(citizen.uuid)
     .fetch_optional(&state.pool)
     .await {
         Ok(candidate) => {
@@ -136,7 +142,7 @@ pub async fn get_candidate_registration(
     match candidate {
         None if registration_open => {
             trace!(%election_uuid, citizen_id = citizen.id, "Rendering new candidate registration form");
-            let options = match vp_options(&state, election_id, citizen.id, None).await {
+            let options = match vp_options(&state, election_id, citizen.uuid, None).await {
                 Ok(options) => options,
                 Err(response) => return response,
             };
@@ -168,12 +174,12 @@ pub async fn get_candidate_registration(
                             president.election_display_name AS president_name,
                             vice_president.election_display_name AS vice_president_name
                      FROM presidential_tickets
-                     JOIN candidates president ON president.id = presidential_tickets.president_candidate_id
-                     JOIN candidates vice_president ON vice_president.id = presidential_tickets.vice_president_candidate_id
-                     WHERE presidential_tickets.election_id = $1 AND vice_president.id = $2",
+                     JOIN candidates president ON president.uuid = presidential_tickets.president_candidate_id
+                     JOIN candidates vice_president ON vice_president.uuid = presidential_tickets.vice_president_candidate_id
+                     WHERE presidential_tickets.election_id = $1 AND vice_president.uuid = $2",
                 )
                 .bind(election_id)
-                .bind(candidate.get::<i64, _>("id"))
+                .bind(candidate.get::<uuid::Uuid, _>("id"))
                 .fetch_optional(&state.pool)
                 .await {
                     Ok(Some(ticket)) => ticket,
@@ -201,16 +207,16 @@ pub async fn get_candidate_registration(
                 );
             } else if position == "president" {
                 let ticket = match sqlx::query(
-                    "SELECT presidential_tickets.id, presidential_tickets.status::text AS status,
+                    "SELECT presidential_tickets.uuid AS id, presidential_tickets.status::text AS status,
                             vice_president.citizen_id AS vice_president_citizen_id,
                             vice_president.election_display_name AS vice_president_name,
                             vice_president.party AS vice_president_party
                      FROM presidential_tickets
-                     JOIN candidates vice_president ON vice_president.id = presidential_tickets.vice_president_candidate_id
+                     JOIN candidates vice_president ON vice_president.uuid = presidential_tickets.vice_president_candidate_id
                      WHERE presidential_tickets.election_id = $1 AND presidential_tickets.president_candidate_id = $2",
                 )
                 .bind(election_id)
-                .bind(candidate.get::<i64, _>("id"))
+                .bind(candidate.get::<uuid::Uuid, _>("id"))
                 .fetch_one(&state.pool)
                 .await {
                     Ok(ticket) => ticket,
@@ -220,9 +226,10 @@ pub async fn get_candidate_registration(
                 if ticket_status != "active" {
                     page.show_status(format!("Your presidential ticket is {ticket_status} and can no longer be edited."), false);
                 } else if registration_open {
-                    let current_vp: i64 = ticket.get("vice_president_citizen_id");
+                    let current_vp: uuid::Uuid = ticket.get("vice_president_citizen_id");
                     let options =
-                        match vp_options(&state, election_id, citizen.id, Some(current_vp)).await {
+                        match vp_options(&state, election_id, citizen.uuid, Some(current_vp)).await
+                        {
                             Ok(options) => options,
                             Err(response) => return response,
                         };
@@ -321,7 +328,7 @@ pub async fn post_candidate_registration(
         Err(error) => return database_error(error),
     };
     let election = sqlx::query(
-        "SELECT id, status::text AS status,
+        "SELECT uuid AS id, status::text AS status,
                 status = 'registration' AS registration_open
          FROM elections WHERE uuid = $1 FOR UPDATE",
     )
@@ -340,18 +347,18 @@ pub async fn post_candidate_registration(
         }
         Err(error) => return database_error(error),
     };
-    let election_id: i64 = election.get("id");
+    let election_id: uuid::Uuid = election.get("id");
     let existing = sqlx::query(
-        "SELECT id, position::text AS position, status::text AS status
+        "SELECT uuid AS id, position::text AS position, status::text AS status
          FROM candidates WHERE election_id = $1 AND citizen_id = $2 AND status = 'active' FOR UPDATE",
     )
     .bind(election_id)
-    .bind(citizen.id)
+    .bind(citizen.uuid)
     .fetch_optional(&mut *transaction)
     .await;
     let existing = match existing {
         Ok(existing) => {
-            debug!(%election_uuid, election_id, citizen_id = citizen.id, existing_registration = existing.is_some(), "Loaded existing candidate registration for update");
+            debug!(%election_uuid, %election_id, citizen_id = citizen.id, existing_registration = existing.is_some(), "Loaded existing candidate registration for update");
             existing
         }
         Err(error) => return database_error(error),
@@ -369,11 +376,11 @@ pub async fn post_candidate_registration(
         Some(existing) if form.position == "council" => {
             debug!(%election_uuid, citizen_id = citizen.id, "Updating council candidate registration");
             sqlx::query(
-                "UPDATE candidates SET election_display_name = $1, party = $2 WHERE id = $3",
+                "UPDATE candidates SET election_display_name = $1, party = $2 WHERE uuid = $3",
             )
             .bind(form.election_display_name.trim())
             .bind(form.party.trim())
-            .bind(existing.get::<i64, _>("id"))
+            .bind(existing.get::<uuid::Uuid, _>("id"))
             .execute(&mut *transaction)
             .await
             .map(|_| ())
@@ -384,7 +391,7 @@ pub async fn post_candidate_registration(
                 &mut transaction,
                 election_id,
                 existing.get("id"),
-                citizen.id,
+                citizen.uuid,
                 &form,
             )
             .await
@@ -400,7 +407,7 @@ pub async fn post_candidate_registration(
                  VALUES ($1, $2, 'council', $3, $4)",
             )
             .bind(election_id)
-            .bind(citizen.id)
+            .bind(citizen.uuid)
             .bind(form.election_display_name.trim())
             .bind(form.party.trim())
             .execute(&mut *transaction)
@@ -409,7 +416,8 @@ pub async fn post_candidate_registration(
         }
         None => {
             debug!(%election_uuid, citizen_id = citizen.id, "Creating presidential ticket registration");
-            create_presidential_registration(&mut transaction, election_id, citizen.id, &form).await
+            create_presidential_registration(&mut transaction, election_id, citizen.uuid, &form)
+                .await
         }
     };
     if let Err(error) = result {
@@ -418,7 +426,7 @@ pub async fn post_candidate_registration(
     if let Err(error) = transaction.commit().await {
         return database_error(error);
     }
-    info!(%election_uuid, election_id, citizen_id = citizen.id, position = %form.position, "Saved candidate registration");
+    info!(%election_uuid, %election_id, citizen_id = citizen.id, position = %form.position, "Saved candidate registration");
     Redirect::to(&format!("/elections/{election_uuid}/register")).into_response()
 }
 
@@ -440,14 +448,14 @@ pub async fn post_withdraw_candidate(
         Err(error) => return database_error(error),
     };
     let candidate = sqlx::query(
-        "SELECT candidates.id, candidates.uuid, candidates.position::text AS position,
-                candidates.status::text AS status, elections.id AS election_id
-         FROM candidates JOIN elections ON elections.id = candidates.election_id
+        "SELECT candidates.uuid AS id, candidates.uuid, candidates.position::text AS position,
+                candidates.status::text AS status, elections.uuid AS election_id
+         FROM candidates JOIN elections ON elections.uuid = candidates.election_id
          WHERE elections.uuid = $1 AND candidates.citizen_id = $2 AND candidates.status = 'active'
          FOR UPDATE OF candidates",
     )
     .bind(election_uuid)
-    .bind(citizen.id)
+    .bind(citizen.uuid)
     .fetch_optional(&mut *transaction)
     .await;
     let candidate = match candidate {
@@ -465,10 +473,11 @@ pub async fn post_withdraw_candidate(
         if previous == "withdrawn" {
             return bad_request("This registration is already withdrawn.");
         }
-        if let Err(error) = sqlx::query("UPDATE candidates SET status = 'withdrawn' WHERE id = $1")
-            .bind(candidate.get::<i64, _>("id"))
-            .execute(&mut *transaction)
-            .await
+        if let Err(error) =
+            sqlx::query("UPDATE candidates SET status = 'withdrawn' WHERE uuid = $1")
+                .bind(candidate.get::<uuid::Uuid, _>("id"))
+                .execute(&mut *transaction)
+                .await
         {
             return database_error(error);
         }
@@ -478,7 +487,7 @@ pub async fn post_withdraw_candidate(
             "SELECT uuid, status::text AS status FROM presidential_tickets
              WHERE president_candidate_id = $1 OR vice_president_candidate_id = $1 FOR UPDATE",
         )
-        .bind(candidate.get::<i64, _>("id"))
+        .bind(candidate.get::<uuid::Uuid, _>("id"))
         .fetch_optional(&mut *transaction)
         .await;
         let ticket = match ticket {
@@ -500,7 +509,7 @@ pub async fn post_withdraw_candidate(
         }
         if let Err(error) = sqlx::query(
             "UPDATE candidates SET status = 'withdrawn'
-             WHERE id IN (
+             WHERE uuid IN (
                  SELECT president_candidate_id FROM presidential_tickets WHERE uuid = $1
                  UNION ALL
                  SELECT vice_president_candidate_id FROM presidential_tickets WHERE uuid = $1
@@ -537,9 +546,10 @@ pub async fn get_election_candidates(
     State(state): State<AppState>,
     jar: CookieJar,
     Path(election_uuid): Path<uuid::Uuid>,
+    Query(search): Query<CandidateSearch>,
 ) -> Response {
     trace!(%election_uuid, "Handling public election candidates request");
-    let election = match sqlx::query("SELECT id, name FROM elections WHERE uuid = $1")
+    let election = match sqlx::query("SELECT uuid AS id, name FROM elections WHERE uuid = $1")
         .bind(election_uuid)
         .fetch_optional(&state.pool)
         .await
@@ -551,14 +561,14 @@ pub async fn get_election_candidates(
         }
         Err(error) => return database_error(error),
     };
-    let election_id: i64 = election.get("id");
+    let election_id: uuid::Uuid = election.get("id");
     let tickets = match sqlx::query(
-        "SELECT presidential_tickets.id,
+        "SELECT presidential_tickets.uuid AS id,
                 president.election_display_name AS president_name, president.party AS president_party,
                 vice_president.election_display_name AS vice_president_name, vice_president.party AS vice_president_party
          FROM presidential_tickets
-         JOIN candidates president ON president.id = presidential_tickets.president_candidate_id
-         JOIN candidates vice_president ON vice_president.id = presidential_tickets.vice_president_candidate_id
+         JOIN candidates president ON president.uuid = presidential_tickets.president_candidate_id
+         JOIN candidates vice_president ON vice_president.uuid = presidential_tickets.vice_president_candidate_id
          WHERE presidential_tickets.election_id = $1 AND presidential_tickets.status = 'active'
          AND president.status = 'active' AND vice_president.status = 'active'
          ORDER BY president.election_display_name",
@@ -567,13 +577,25 @@ pub async fn get_election_candidates(
     .fetch_all(&state.pool)
     .await {
         Ok(tickets) => {
-            debug!(%election_uuid, election_id, ticket_count = tickets.len(), "Retrieved active presidential tickets");
+            debug!(%election_uuid, %election_id, ticket_count = tickets.len(), "Retrieved active presidential tickets");
             tickets
         }
         Err(error) => return database_error(error),
     };
     let mut presidential = String::new();
+    let search_value = search.q.trim().to_lowercase();
     for ticket in tickets {
+        let searchable = format!(
+            "{} {} {} {}",
+            ticket.get::<String, _>("president_name"),
+            ticket.get::<String, _>("president_party"),
+            ticket.get::<String, _>("vice_president_name"),
+            ticket.get::<String, _>("vice_president_party"),
+        )
+        .to_lowercase();
+        if !search_value.is_empty() && !searchable.contains(&search_value) {
+            continue;
+        }
         let messages = match load_messages(&state, ticket.get("id")).await {
             Ok(messages) => messages,
             Err(response) => return response,
@@ -632,13 +654,22 @@ pub async fn get_election_candidates(
     .await
     {
         Ok(council) => {
-            debug!(%election_uuid, election_id, candidate_count = council.len(), "Retrieved active council candidates");
+            debug!(%election_uuid, %election_id, candidate_count = council.len(), "Retrieved active council candidates");
             council
         }
         Err(error) => return database_error(error),
     };
     let mut council_items = String::new();
     for candidate in council {
+        let searchable = format!(
+            "{} {}",
+            candidate.get::<String, _>("election_display_name"),
+            candidate.get::<String, _>("party"),
+        )
+        .to_lowercase();
+        if !search_value.is_empty() && !searchable.contains(&search_value) {
+            continue;
+        }
         council_items.push_str(
             &include_str!(concat!(
                 env!("CARGO_MANIFEST_DIR"),
@@ -661,6 +692,7 @@ pub async fn get_election_candidates(
         "/static/candidates/candidates.html"
     ))
     .replace("$${{election_name}}", &html_escape(election.get("name")))
+    .replace("$${{search_query}}", &html_escape(search.q.trim()))
     .replace("$${{presidential_candidates}}", &presidential)
     .replace("$${{council_candidates}}", &council_items)
     .replace("$${{presidential_empty_hidden}}", presidential_empty_hidden)
@@ -678,7 +710,7 @@ async fn election_registration_state(
 ) -> Result<Option<sqlx::postgres::PgRow>, Response> {
     trace!(%election_uuid, "Retrieving election registration state");
     sqlx::query(
-        "SELECT id, name, status::text AS status,
+        "SELECT uuid AS id, name, status::text AS status,
                 status = 'registration' AS registration_open
          FROM elections WHERE uuid = $1",
     )
@@ -690,42 +722,42 @@ async fn election_registration_state(
 
 async fn vp_options(
     state: &AppState,
-    election_id: i64,
-    president_citizen_id: i64,
-    current_vp: Option<i64>,
+    election_id: uuid::Uuid,
+    president_citizen_id: uuid::Uuid,
+    current_vp: Option<uuid::Uuid>,
 ) -> Result<String, Response> {
     trace!(
-        election_id,
-        president_citizen_id, current_vp, "Retrieving eligible vice presidents"
+        %election_id,
+        %president_citizen_id, ?current_vp, "Retrieving eligible vice presidents"
     );
     let citizens = sqlx::query(
-        "SELECT citizens.id,
+        "SELECT citizens.uuid AS id,
                 COALESCE(NULLIF(authentik_identities.display_name, ''),
                          NULLIF(authentik_identities.preferred_username, ''),
                          NULLIF(authentik_identities.email, ''),
-                         'Citizen ' || citizens.id::text) AS display_name
-         FROM citizens JOIN authentik_identities ON authentik_identities.citizen_id = citizens.id
-         WHERE citizens.banned = FALSE AND citizens.id <> $2
-         AND (citizens.id = $3 OR NOT EXISTS (
+                         'Citizen ' || citizens.uuid::text) AS display_name
+         FROM citizens JOIN authentik_identities ON authentik_identities.citizen_id = citizens.uuid
+         WHERE citizens.banned = FALSE AND citizens.uuid <> $2
+         AND (citizens.uuid = $3 OR NOT EXISTS (
              SELECT 1 FROM candidates
-             WHERE candidates.election_id = $1 AND candidates.citizen_id = citizens.id
+             WHERE candidates.election_id = $1 AND candidates.citizen_id = citizens.uuid
              AND candidates.status = 'active'
          )) ORDER BY display_name",
     )
     .bind(election_id)
     .bind(president_citizen_id)
-    .bind(current_vp.unwrap_or(-1))
+    .bind(current_vp.unwrap_or(uuid::Uuid::nil()))
     .fetch_all(&state.pool)
     .await
     .map_err(database_error)?;
     debug!(
-        election_id,
+        %election_id,
         citizen_count = citizens.len(),
         "Retrieved eligible vice presidents"
     );
     let mut options = String::new();
     for citizen in citizens {
-        let id: i64 = citizen.get("id");
+        let id: uuid::Uuid = citizen.get("id");
         options.push_str(
             &include_str!(concat!(
                 env!("CARGO_MANIFEST_DIR"),
@@ -781,7 +813,10 @@ fn validate_candidate_form(form: &CandidateForm) -> Result<(), &'static str> {
         return Err("Display name and party are required.");
     }
     if form.position == "president" {
-        if form.vice_president_citizen_id.parse::<i64>().is_err()
+        if form
+            .vice_president_citizen_id
+            .parse::<uuid::Uuid>()
+            .is_err()
             || form.vice_president_display_name.trim().is_empty()
             || form.vice_president_party.trim().is_empty()
         {
@@ -817,14 +852,17 @@ fn validate_messages(messages: &[String]) -> Result<(), &'static str> {
 
 async fn create_presidential_registration(
     transaction: &mut Transaction<'_, Postgres>,
-    election_id: i64,
-    president_citizen_id: i64,
+    election_id: uuid::Uuid,
+    president_citizen_id: uuid::Uuid,
     form: &CandidateForm,
 ) -> Result<(), sqlx::Error> {
-    let vp_citizen_id = form.vice_president_citizen_id.parse::<i64>().unwrap();
+    let vp_citizen_id = form
+        .vice_president_citizen_id
+        .parse::<uuid::Uuid>()
+        .unwrap();
     trace!(
-        election_id,
-        president_citizen_id, vp_citizen_id, "Creating presidential registration"
+        %election_id,
+        %president_citizen_id, %vp_citizen_id, "Creating presidential registration"
     );
     ensure_vp_available(
         transaction,
@@ -834,9 +872,9 @@ async fn create_presidential_registration(
         None,
     )
     .await?;
-    let president_id = sqlx::query_scalar::<_, i64>(
+    let president_id = sqlx::query_scalar::<_, uuid::Uuid>(
         "INSERT INTO candidates (election_id, citizen_id, position, election_display_name, party)
-         VALUES ($1, $2, 'president', $3, $4) RETURNING id",
+         VALUES ($1, $2, 'president', $3, $4) RETURNING uuid",
     )
     .bind(election_id)
     .bind(president_citizen_id)
@@ -844,9 +882,9 @@ async fn create_presidential_registration(
     .bind(form.party.trim())
     .fetch_one(&mut **transaction)
     .await?;
-    let vp_id = sqlx::query_scalar::<_, i64>(
+    let vp_id = sqlx::query_scalar::<_, uuid::Uuid>(
         "INSERT INTO candidates (election_id, citizen_id, position, election_display_name, party)
-         VALUES ($1, $2, 'vice_president', $3, $4) RETURNING id",
+         VALUES ($1, $2, 'vice_president', $3, $4) RETURNING uuid",
     )
     .bind(election_id)
     .bind(vp_citizen_id)
@@ -854,9 +892,9 @@ async fn create_presidential_registration(
     .bind(form.vice_president_party.trim())
     .fetch_one(&mut **transaction)
     .await?;
-    let ticket_id = sqlx::query_scalar::<_, i64>(
+    let ticket_id = sqlx::query_scalar::<_, uuid::Uuid>(
         "INSERT INTO presidential_tickets (election_id, president_candidate_id, vice_president_candidate_id)
-         VALUES ($1, $2, $3) RETURNING id",
+         VALUES ($1, $2, $3) RETURNING uuid",
     )
     .bind(election_id)
     .bind(president_id)
@@ -864,28 +902,28 @@ async fn create_presidential_registration(
     .fetch_one(&mut **transaction)
     .await?;
     debug!(
-        election_id,
-        president_id, vp_id, ticket_id, "Created presidential ticket records"
+        %election_id,
+        %president_id, %vp_id, %ticket_id, "Created presidential ticket records"
     );
     replace_messages(transaction, ticket_id, &form_messages(form)).await
 }
 
 async fn update_presidential_registration(
     transaction: &mut Transaction<'_, Postgres>,
-    election_id: i64,
-    president_id: i64,
-    president_citizen_id: i64,
+    election_id: uuid::Uuid,
+    president_id: uuid::Uuid,
+    president_citizen_id: uuid::Uuid,
     form: &CandidateForm,
 ) -> Result<(), sqlx::Error> {
     trace!(
-        election_id,
-        president_id, president_citizen_id, "Updating presidential registration"
+        %election_id,
+        %president_id, %president_citizen_id, "Updating presidential registration"
     );
     let ticket = sqlx::query(
-        "SELECT presidential_tickets.id, presidential_tickets.status::text AS status,
+        "SELECT presidential_tickets.uuid AS id, presidential_tickets.status::text AS status,
                 vice_president_candidate_id, vice_president.citizen_id AS old_vp_citizen_id
          FROM presidential_tickets
-         JOIN candidates vice_president ON vice_president.id = presidential_tickets.vice_president_candidate_id
+         JOIN candidates vice_president ON vice_president.uuid = presidential_tickets.vice_president_candidate_id
          WHERE presidential_tickets.election_id = $1 AND presidential_tickets.president_candidate_id = $2
          FOR UPDATE OF presidential_tickets, vice_president",
     )
@@ -898,8 +936,11 @@ async fn update_presidential_registration(
             "A withdrawn or invalidated ticket cannot be edited.".to_string(),
         ));
     }
-    let vp_citizen_id = form.vice_president_citizen_id.parse::<i64>().unwrap();
-    let old_vp_citizen_id: i64 = ticket.get("old_vp_citizen_id");
+    let vp_citizen_id = form
+        .vice_president_citizen_id
+        .parse::<uuid::Uuid>()
+        .unwrap();
+    let old_vp_citizen_id: uuid::Uuid = ticket.get("old_vp_citizen_id");
     ensure_vp_available(
         transaction,
         election_id,
@@ -908,18 +949,18 @@ async fn update_presidential_registration(
         Some(old_vp_citizen_id),
     )
     .await?;
-    let mut vp_id: i64 = ticket.get("vice_president_candidate_id");
+    let mut vp_id: uuid::Uuid = ticket.get("vice_president_candidate_id");
     if vp_citizen_id != old_vp_citizen_id {
         debug!(
-            election_id,
-            president_id,
-            old_vp_citizen_id,
-            new_vp_citizen_id = vp_citizen_id,
+            %election_id,
+            %president_id,
+            %old_vp_citizen_id,
+            new_vp_citizen_id = %vp_citizen_id,
             "Replacing presidential ticket vice president"
         );
-        let new_vp_id = sqlx::query_scalar::<_, i64>(
+        let new_vp_id = sqlx::query_scalar::<_, uuid::Uuid>(
             "INSERT INTO candidates (election_id, citizen_id, position, election_display_name, party)
-             VALUES ($1, $2, 'vice_president', $3, $4) RETURNING id",
+             VALUES ($1, $2, 'vice_president', $3, $4) RETURNING uuid",
         )
         .bind(election_id)
         .bind(vp_citizen_id)
@@ -928,25 +969,25 @@ async fn update_presidential_registration(
         .fetch_one(&mut **transaction)
         .await?;
         sqlx::query(
-            "UPDATE presidential_tickets SET vice_president_candidate_id = $1 WHERE id = $2",
+            "UPDATE presidential_tickets SET vice_president_candidate_id = $1 WHERE uuid = $2",
         )
         .bind(new_vp_id)
-        .bind(ticket.get::<i64, _>("id"))
+        .bind(ticket.get::<uuid::Uuid, _>("id"))
         .execute(&mut **transaction)
         .await?;
-        sqlx::query("UPDATE candidates SET status = 'invalidated' WHERE id = $1")
+        sqlx::query("UPDATE candidates SET status = 'invalidated' WHERE uuid = $1")
             .bind(vp_id)
             .execute(&mut **transaction)
             .await?;
         vp_id = new_vp_id;
     }
-    sqlx::query("UPDATE candidates SET election_display_name = $1, party = $2 WHERE id = $3")
+    sqlx::query("UPDATE candidates SET election_display_name = $1, party = $2 WHERE uuid = $3")
         .bind(form.election_display_name.trim())
         .bind(form.party.trim())
         .bind(president_id)
         .execute(&mut **transaction)
         .await?;
-    sqlx::query("UPDATE candidates SET election_display_name = $1, party = $2 WHERE id = $3")
+    sqlx::query("UPDATE candidates SET election_display_name = $1, party = $2 WHERE uuid = $3")
         .bind(form.vice_president_display_name.trim())
         .bind(form.vice_president_party.trim())
         .bind(vp_id)
@@ -957,14 +998,14 @@ async fn update_presidential_registration(
 
 async fn ensure_vp_available(
     transaction: &mut Transaction<'_, Postgres>,
-    election_id: i64,
-    president_citizen_id: i64,
-    vp_citizen_id: i64,
-    current_vp: Option<i64>,
+    election_id: uuid::Uuid,
+    president_citizen_id: uuid::Uuid,
+    vp_citizen_id: uuid::Uuid,
+    current_vp: Option<uuid::Uuid>,
 ) -> Result<(), sqlx::Error> {
     trace!(
-        election_id,
-        president_citizen_id, vp_citizen_id, current_vp, "Checking vice president availability"
+        %election_id,
+        %president_citizen_id, %vp_citizen_id, ?current_vp, "Checking vice president availability"
     );
     if president_citizen_id == vp_citizen_id {
         return Err(sqlx::Error::Protocol(
@@ -973,8 +1014,8 @@ async fn ensure_vp_available(
     }
     let available = sqlx::query_scalar::<_, bool>(
         "SELECT EXISTS (
-            SELECT 1 FROM citizens JOIN authentik_identities ON authentik_identities.citizen_id = citizens.id
-            WHERE citizens.id = $1 AND citizens.banned = FALSE
+            SELECT 1 FROM citizens JOIN authentik_identities ON authentik_identities.citizen_id = citizens.uuid
+            WHERE citizens.uuid = $1 AND citizens.banned = FALSE
             AND ($1 = $3 OR NOT EXISTS (
                 SELECT 1 FROM candidates
                 WHERE candidates.election_id = $2 AND candidates.citizen_id = $1
@@ -984,24 +1025,24 @@ async fn ensure_vp_available(
     )
     .bind(vp_citizen_id)
     .bind(election_id)
-    .bind(current_vp.unwrap_or(-1))
+    .bind(current_vp.unwrap_or(uuid::Uuid::nil()))
     .fetch_one(&mut **transaction)
     .await?;
     if !available {
         warn!(
-            election_id,
-            vp_citizen_id, "Requested vice president is unavailable"
+            %election_id,
+            %vp_citizen_id, "Requested vice president is unavailable"
         );
         return Err(sqlx::Error::Protocol(
             "That vice president is no longer available.".to_string(),
         ));
     }
-    trace!(election_id, vp_citizen_id, "Vice president is available");
+    trace!(%election_id, %vp_citizen_id, "Vice president is available");
     Ok(())
 }
 
-async fn load_messages(state: &AppState, ticket_id: i64) -> Result<Vec<String>, Response> {
-    trace!(ticket_id, "Loading presidential ticket messages");
+async fn load_messages(state: &AppState, ticket_id: uuid::Uuid) -> Result<Vec<String>, Response> {
+    trace!(%ticket_id, "Loading presidential ticket messages");
     let rows = sqlx::query("SELECT position, message FROM presidential_ticket_messages WHERE presidential_ticket_id = $1 ORDER BY position")
         .bind(ticket_id)
         .fetch_all(&state.pool)
@@ -1012,7 +1053,7 @@ async fn load_messages(state: &AppState, ticket_id: i64) -> Result<Vec<String>, 
         messages[(row.get::<i32, _>("position") - 1) as usize] = row.get("message");
     }
     debug!(
-        ticket_id,
+        %ticket_id,
         message_count = messages
             .iter()
             .filter(|message| !message.is_empty())
@@ -1024,11 +1065,11 @@ async fn load_messages(state: &AppState, ticket_id: i64) -> Result<Vec<String>, 
 
 async fn replace_messages(
     transaction: &mut Transaction<'_, Postgres>,
-    ticket_id: i64,
+    ticket_id: uuid::Uuid,
     messages: &[String],
 ) -> Result<(), sqlx::Error> {
     trace!(
-        ticket_id,
+        %ticket_id,
         message_count = messages.len(),
         "Replacing presidential ticket messages"
     );
@@ -1045,7 +1086,7 @@ async fn replace_messages(
             .await?;
     }
     debug!(
-        ticket_id,
+        %ticket_id,
         message_count = messages.len(),
         "Replaced presidential ticket messages"
     );
@@ -1054,13 +1095,13 @@ async fn replace_messages(
 
 async fn insert_withdrawal_change(
     transaction: &mut Transaction<'_, Postgres>,
-    election_id: i64,
+    election_id: uuid::Uuid,
     actor: &AuthenticatedCitizen,
     target_type: &str,
     target_uuid: uuid::Uuid,
     previous: &str,
 ) -> Result<(), sqlx::Error> {
-    trace!(election_id, actor_citizen_id = actor.id, target_type, %target_uuid, "Recording candidate withdrawal change");
+    trace!(%election_id, actor_citizen_id = actor.id, target_type, %target_uuid, "Recording candidate withdrawal change");
     sqlx::query(
         "INSERT INTO election_change_log (
             election_id, actor_citizen_id, actor_display_name, target_type, target_uuid,
@@ -1068,14 +1109,14 @@ async fn insert_withdrawal_change(
          ) VALUES ($1, $2, $3, $4, $5, $6, 'withdrawn', 'Candidate withdrew')",
     )
     .bind(election_id)
-    .bind(actor.id)
+    .bind(actor.uuid)
     .bind(&actor.display_name)
     .bind(target_type)
     .bind(target_uuid)
     .bind(previous)
     .execute(&mut **transaction)
     .await?;
-    debug!(election_id, actor_citizen_id = actor.id, target_type, %target_uuid, "Recorded candidate withdrawal change");
+    debug!(%election_id, actor_citizen_id = actor.id, target_type, %target_uuid, "Recorded candidate withdrawal change");
     Ok(())
 }
 
@@ -1147,7 +1188,7 @@ mod tests {
             position: position.to_string(),
             election_display_name: "Name".to_string(),
             party: "Party".to_string(),
-            vice_president_citizen_id: "2".to_string(),
+            vice_president_citizen_id: "00000000-0000-0000-0000-000000000002".to_string(),
             vice_president_display_name: "VP".to_string(),
             vice_president_party: "VP Party".to_string(),
             message_1: String::new(),

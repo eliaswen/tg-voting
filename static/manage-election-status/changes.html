@@ -1,8 +1,14 @@
 <section id="election-changes-page" class="page elections-page election-changes-page">
 <h1 id="election-changes-title" class="page-title elections-title">$${{election_name}} changes</h1>
-<ul id="election-changes-list" class="item-list changes-list">$${{change_items}}<li id="election-changes-empty" class="item empty-state changes-empty-state" $${{empty_hidden}}>No changes have been recorded.</li>
+<form id="election-changes-search-form" class="search-form changes-search-form" method="get" action="/elections/$${{election_uuid}}/changes">
+<label id="election-changes-search-label" class="form-label search-label" for="election-changes-search-input">Search change log</label>
+<input id="election-changes-search-input" class="form-control search-input" type="search" name="q" value="$${{search_query}}" placeholder="Actor, target, value, or reason">
+<button id="election-changes-search-submit" class="form-button search-button" type="submit">Search</button>
+<a id="election-changes-search-clear" class="navigation-link clear-search-link" href="/elections/$${{election_uuid}}/changes">Clear</a>
+</form>
+<ul id="election-changes-list" class="item-list changes-list">$${{change_items}}<li id="election-changes-empty" class="item empty-state changes-empty-state" $${{empty_hidden}}>No changes matched your search.</li>
 </ul>
 <nav id="election-changes-navigation" class="page-navigation elections-navigation">
-<a id="election-changes-candidates-link" class="navigation-link candidates-link" href="/elections/$${{election_uuid}}/candidates">Candidates</a> | <a id="election-changes-elections-link" class="navigation-link elections-link" href="/elections">All elections</a>
+<a id="election-changes-overview-link" class="navigation-link election-link" href="/elections/$${{election_uuid}}">Election overview</a> | <a id="election-changes-candidates-link" class="navigation-link candidates-link" href="/elections/$${{election_uuid}}/candidates">Candidates</a> | <a id="election-changes-elections-link" class="navigation-link elections-link" href="/elections">All elections</a>
 </nav>
 </section>

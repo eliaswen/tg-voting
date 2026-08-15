@@ -1,0 +1,27 @@
+<tr id="census-citizen-row-$${{citizen_uuid}}" class="table-row data-row census-citizen-row">
+<td id="census-oauth-username-$${{citizen_uuid}}" class="table-cell identity-cell oauth-username-cell">
+<span id="census-oauth-username-value-$${{citizen_uuid}}" class="identity-value oauth-username-value">$${{oauth_username}}</span>
+</td>
+<td id="census-display-name-$${{citizen_uuid}}" class="table-cell identity-cell display-name-cell">
+<span id="census-display-name-value-$${{citizen_uuid}}" class="identity-value display-name-value">$${{display_name}}</span>
+</td>
+<td id="census-discord-username-$${{citizen_uuid}}" class="table-cell social-cell discord-username-cell">
+<span id="census-discord-username-value-$${{citizen_uuid}}" class="social-value discord-username-value">$${{discord_username}}</span>
+</td>
+<td id="census-reddit-username-$${{citizen_uuid}}" class="table-cell social-cell reddit-username-cell">
+<span id="census-reddit-username-value-$${{citizen_uuid}}" class="social-value reddit-username-value">$${{reddit_username}}</span>
+</td>
+<td id="census-citizen-id-$${{citizen_uuid}}" class="table-cell editable-cell citizen-id-cell">
+<input id="census-citizen-id-input-$${{citizen_uuid}}" class="form-control table-control text-input citizen-id-input" type="text" name="citizen_id" value="$${{citizen_id}}" maxlength="100" form="census-citizen-form-$${{citizen_uuid}}">
+</td>
+<td id="census-status-$${{citizen_uuid}}" class="table-cell editable-cell census-status-cell">
+<select id="census-status-select-$${{citizen_uuid}}" class="form-control table-control select-control census-status-select" name="status" form="census-citizen-form-$${{citizen_uuid}}">
+$${{status_options}}
+</select>
+</td>
+<td id="census-actions-$${{citizen_uuid}}" class="table-cell action-cell census-action-cell">
+<form id="census-citizen-form-$${{citizen_uuid}}" class="manage-form table-form census-citizen-form" method="post" action="/manage/census/$${{census_uuid}}/citizens/$${{citizen_uuid}}">
+<button id="census-citizen-save-$${{citizen_uuid}}" class="form-button table-button submit-button census-save-button" type="submit">Save</button>
+</form>
+</td>
+</tr>

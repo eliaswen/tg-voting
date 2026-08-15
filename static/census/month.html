@@ -1,0 +1,55 @@
+<section id="census-month-page" class="page manage-page census-page census-month-page">
+<header id="census-month-header" class="page-header manage-header census-month-header">
+<p id="census-month-context" class="page-context census-page-context"><a id="census-month-dashboard-link" class="navigation-link back-link" href="/manage/census">Census management</a></p>
+<h1 id="census-month-title" class="page-title manage-title census-month-title">$${{selected_month}} census</h1>
+<p id="census-month-status" class="status-message census-status selected-census-status">Status: <strong id="census-month-status-value" class="status-value census-status-value">$${{selected_status}}</strong></p>
+<p id="census-month-description" class="page-description census-description">Review and update the records for this month. Social and OAuth identities are reference fields and cannot be changed here.</p>
+</header>
+
+<section id="census-activation-section" class="page-section manage-section census-section census-activation-section" $${{activate_hidden}}>
+<header id="census-activation-header" class="section-header census-section-header census-activation-header">
+<h2 id="census-activation-title" class="section-title manage-section-title census-section-title">Use this census</h2>
+<p id="census-activation-description" class="section-description census-section-description">Activating this month replaces the census currently used by the application. The previous monthly record remains stored.</p>
+</header>
+<form id="census-activation-form" class="manage-form census-form census-activation-form" method="post" action="/manage/census/$${{selected_census_uuid}}/activate">
+<button id="census-activation-submit" class="form-button submit-button census-activation-button" type="submit">Use this census now</button>
+</form>
+</section>
+
+<section id="census-citizens-section" class="page-section manage-section census-section census-citizens-section">
+<header id="census-citizens-header" class="section-header census-section-header census-citizens-header">
+<h2 id="census-citizens-title" class="section-title manage-section-title census-section-title">Citizen records</h2>
+<p id="census-citizens-description" class="section-description census-section-description">Citizen ID and census status are the editable fields. Save each citizen separately after making a change.</p>
+</header>
+<form id="census-citizens-search-form" class="search-form census-search-form" method="get" action="/manage/census/$${{selected_census_uuid}}">
+<label id="census-citizens-search-label" class="form-label search-label" for="census-citizens-search-input">Search citizens</label>
+<input id="census-citizens-search-input" class="form-control search-input" type="search" name="q" value="$${{search_query}}" placeholder="Name, username, citizen ID, or status">
+<button id="census-citizens-search-submit" class="form-button search-button" type="submit">Search</button>
+<a id="census-citizens-search-clear" class="navigation-link clear-search-link" href="/manage/census/$${{selected_census_uuid}}">Clear</a>
+</form>
+<div id="census-table-container" class="table-container census-table-container">
+<table id="census-citizens-table" class="data-table manage-table census-table citizens-table" width="100%">
+<thead id="census-citizens-table-head" class="table-head census-table-head">
+<tr id="census-citizens-heading-row" class="table-row heading-row census-heading-row">
+<th id="census-heading-oauth-username" class="table-heading identity-heading oauth-username-heading" scope="col">OAuth username</th>
+<th id="census-heading-display-name" class="table-heading identity-heading display-name-heading" scope="col">Display name</th>
+<th id="census-heading-discord" class="table-heading social-heading discord-heading" scope="col">Discord username</th>
+<th id="census-heading-reddit" class="table-heading social-heading reddit-heading" scope="col">Reddit username</th>
+<th id="census-heading-citizen-id" class="table-heading census-field-heading citizen-id-heading" scope="col">Citizen ID</th>
+<th id="census-heading-status" class="table-heading census-field-heading status-heading" scope="col">Census status</th>
+<th id="census-heading-actions" class="table-heading action-heading census-action-heading" scope="col">Actions</th>
+</tr>
+</thead>
+<tbody id="census-citizens-table-body" class="table-body census-table-body">
+$${{citizen_rows}}
+<tr id="census-citizens-empty" class="table-row empty-row census-empty-row" $${{citizens_empty_hidden}}><td id="census-citizens-empty-cell" class="table-cell empty-state census-empty-state" colspan="7">No citizens matched your search.</td></tr>
+</tbody>
+</table>
+</div>
+</section>
+
+<nav id="census-month-navigation" class="page-navigation manage-navigation census-management-navigation">
+<a id="census-month-back-link" class="navigation-link back-link" href="/manage/census">Back to census management</a> |
+<a id="census-month-management-link" class="navigation-link management-link" href="/manage">Management home</a>
+</nav>
+</section>

@@ -1,0 +1,46 @@
+<section id="candidate-management-page" class="page manage-page election-page candidate-management-page">
+<header id="candidate-management-header" class="page-header manage-header election-header candidate-management-header">
+<p id="candidate-management-context" class="page-context election-context"><a id="candidate-management-dashboard-link" class="navigation-link back-link" href="/manage/elections/$${{election_uuid}}">Election dashboard</a></p>
+<h1 id="candidate-management-title" class="page-title manage-title election-title">Season $${{season}} candidates</h1>
+<p id="candidate-management-election" class="status-message election-status">$${{name}} is currently <strong id="candidate-management-status" class="status-value">$${{status}}</strong>.</p>
+<p id="candidate-management-description" class="page-description manage-description">Review registrations and save each ticket or council candidate separately. Status changes made here are recorded with the reason supplied in the form.</p>
+</header>
+
+<section id="candidate-management-help" class="page-section manage-section candidates-section candidate-help-section">
+<h2 id="candidate-management-help-title" class="section-title manage-section-title">Candidate administration</h2>
+<p id="candidate-management-help-description" class="section-description">Presidential candidates are managed as tickets with their current vice president. Council candidates are managed individually. The public candidate list is available from the navigation below.</p>
+</section>
+
+<section id="presidential-tickets-section" class="page-section manage-section candidates-section presidential-tickets-section">
+<header id="presidential-tickets-header" class="section-header candidates-section-header">
+<h2 id="presidential-tickets-title" class="section-title candidates-section-title">Presidential tickets</h2>
+<p id="presidential-tickets-description" class="section-description candidates-section-description">Edit the public names, parties, vice president, messages, and registration status for each ticket.</p>
+</header>
+$${{presidential_forms}}
+<p id="managed-presidential-tickets-empty" class="empty-state candidates-empty-state" $${{presidential_empty_hidden}}>No presidential tickets are registered.</p>
+</section>
+
+<section id="managed-council-section" class="page-section manage-section candidates-section managed-council-section">
+<header id="managed-council-header" class="section-header candidates-section-header">
+<h2 id="managed-council-title" class="section-title candidates-section-title">Council candidates</h2>
+<p id="managed-council-description" class="section-description candidates-section-description">Edit each council candidate's public name, party, and registration status.</p>
+</header>
+$${{council_forms}}
+<p id="managed-council-candidates-empty" class="empty-state candidates-empty-state" $${{council_empty_hidden}}>No council candidates are registered.</p>
+</section>
+
+<section id="former-vice-presidents-section" class="page-section manage-section candidates-section former-vice-presidents-section">
+<header id="former-vice-presidents-header" class="section-header candidates-section-header">
+<h2 id="former-vice-presidents-title" class="section-title candidates-section-title">Former vice presidents</h2>
+<p id="former-vice-presidents-description" class="section-description candidates-section-description">These vice-presidential candidate records are no longer connected to a current presidential ticket and are kept for the election history.</p>
+</header>
+<ul id="former-vice-presidents-list" class="item-list candidates-list former-vice-presidents-list">
+$${{former_vice_presidents}}
+<li id="former-vice-presidents-empty" class="item empty-state candidates-empty-state" $${{former_vice_presidents_empty_hidden}}>No former vice presidents.</li>
+</ul>
+</section>
+
+<nav id="candidate-management-navigation" class="page-navigation manage-navigation candidate-navigation">
+<a id="candidate-management-status-link" class="navigation-link status-link" href="/manage/elections/$${{election_uuid}}/status">Manage election status</a> | <a id="candidate-management-public-link" class="navigation-link public-link" href="/elections/$${{election_uuid}}/candidates">Public candidate list</a> | <a id="candidate-management-back-link" class="navigation-link back-link" href="/manage/elections/$${{election_uuid}}">Back to election dashboard</a>
+</nav>
+</section>

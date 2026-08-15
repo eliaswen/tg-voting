@@ -1,0 +1,46 @@
+<section id="account-overview-page" class="page account-page account-overview-page">
+<header id="account-overview-header" class="page-header account-header account-overview-header">
+<h1 id="account-overview-title" class="page-title account-title">Account</h1>
+<p id="account-overview-description" class="page-description account-description">View your identity information or choose the part of your account you want to manage.</p>
+</header>
+
+<section id="account-information" class="page-section account-section account-information-section">
+<h2 id="account-information-title" class="section-title account-section-title">Account information</h2>
+<dl id="account-information-list" class="detail-list account-detail-list">
+<dt id="account-username-label" class="detail-label account-detail-label">OAuth username</dt>
+<dd id="account-username-value" class="detail-value account-detail-value">$${{username}}</dd>
+<dt id="account-display-name-label" class="detail-label account-detail-label">Display name</dt>
+<dd id="account-display-name-value" class="detail-value account-detail-value">$${{display_name}}</dd>
+<dt id="account-email-label" class="detail-label account-detail-label">Email</dt>
+<dd id="account-email-value" class="detail-value account-detail-value">$${{email}}</dd>
+<dt id="account-citizen-id-label" class="detail-label account-detail-label">Citizen ID</dt>
+<dd id="account-citizen-id-value" class="detail-value account-detail-value">$${{citizen_id}}</dd>
+</dl>
+<p id="account-edit-description" class="account-description account-edit-description">OAuth identity fields are managed through <a id="account-authentik-link" class="external-link account-edit-link" href="https://auth.ewenlau.net/if/user/#/settings">Authentik</a>.</p>
+$${{role_section}}
+</section>
+
+<nav id="account-sections" class="account-sections account-navigation">
+<ul id="account-sections-list" class="item-list account-navigation-list">
+<li id="account-social-item" class="item account-navigation-item social-account-item">
+<h2 id="account-social-title" class="item-title account-item-title"><a id="account-social-link" class="navigation-link account-section-link" href="/account/social">Linked accounts</a></h2>
+<p id="account-social-description" class="item-description account-item-description">Link or unlink Discord/Reddit accounts.</p>
+</li>
+<li id="account-appearance-item" class="item account-navigation-item appearance-account-item">
+<h2 id="account-appearance-title" class="item-title account-item-title"><a id="account-appearance-link" class="navigation-link account-section-link" href="/account/appearance">Appearance</a></h2>
+<p id="account-appearance-description" class="item-description account-item-description">Choose the theme saved to your account.</p>
+</li>
+<li id="account-sessions-item" class="item account-navigation-item sessions-account-item">
+<h2 id="account-sessions-title" class="item-title account-item-title"><a id="account-sessions-link" class="navigation-link account-section-link" href="/account/sessions">Sessions</a></h2>
+<p id="account-sessions-description" class="item-description account-item-description">Review logged-in devices and revoke sessions.</p>
+</li>
+</ul>
+</nav>
+
+<section id="account-actions" class="page-section account-section account-actions-section">
+<h2 id="account-actions-title" class="section-title account-section-title">Account actions</h2>
+<form id="account-logout-form" class="account-form logout-form" method="post" action="/logout">
+<button id="account-logout-button" class="form-button logout-button" type="submit">Log out</button>
+</form>
+</section>
+</section>

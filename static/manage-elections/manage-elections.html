@@ -1,15 +1,24 @@
 <section id="manage-elections-page" class="page manage-page manage-elections-page">
-    <h1 id="manage-elections-title" class="page-title manage-title">Manage elections</h1>
-    <section id="create-election-section" class="page-section manage-section create-election-section">
-        <h2 id="create-election-title" class="section-title manage-section-title">Create a new season</h2>
-        <form id="create-election-form" class="manage-form election-form" method="post" action="/manage/elections">
-            $${{election_fields}}
-            <button id="create-election-submit" class="form-button submit-button" type="submit">Create season</button>
-        </form>
-    </section>
+    <header id="manage-elections-header" class="page-header manage-header elections-header">
+        <h1 id="manage-elections-title" class="page-title manage-title">Election management</h1>
+        <p id="manage-elections-description" class="page-description manage-description">Open an election to manage its schedule, status, candidates, and public records.</p>
+        <p id="manage-elections-create-action" class="page-action manage-action"><a id="manage-elections-create-link" class="navigation-link action-link" href="/manage/elections/new">Create a new election</a></p>
+    </header>
     <section id="previous-elections-section" class="page-section manage-section previous-elections-section">
-        <h2 id="previous-elections-title" class="section-title manage-section-title">Previous seasons</h2>
-        <ul id="managed-elections-list" class="item-list managed-elections-list">$${{election_items}}<li id="managed-elections-empty" class="item empty-state managed-elections-empty-state" $${{empty_hidden}}>No elections have been created yet.</li>
-</ul>
+        <header id="previous-elections-header" class="section-header elections-section-header">
+            <h2 id="previous-elections-title" class="section-title manage-section-title">Elections</h2>
+            <p id="previous-elections-description" class="section-description">Search by season, name, or current status. Select an election to open its management dashboard.</p>
+        </header>
+        <form id="managed-elections-search-form" class="search-form managed-elections-search-form" method="get" action="/manage/elections">
+            <label id="managed-elections-search-label" class="form-label search-label" for="managed-elections-search-input">Search elections</label>
+            <input id="managed-elections-search-input" class="form-control search-input" type="search" name="q" value="$${{search_query}}" placeholder="Season, name, or status">
+            <button id="managed-elections-search-submit" class="form-button search-button" type="submit">Search</button>
+            <a id="managed-elections-search-clear" class="navigation-link clear-search-link" href="/manage/elections">Clear</a>
+        </form>
+        <ul id="managed-elections-list" class="item-list managed-elections-list">
+            $${{election_items}}
+            <li id="managed-elections-empty" class="item empty-state managed-elections-empty-state" $${{empty_hidden}}>No elections matched your search.</li>
+        </ul>
     </section>
+    <nav id="manage-elections-navigation" class="page-navigation manage-navigation"><a id="manage-elections-back-link" class="navigation-link back-link" href="/manage">Back to management</a></nav>
 </section>

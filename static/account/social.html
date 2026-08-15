@@ -1,0 +1,39 @@
+<section id="account-social-page" class="page account-page account-subpage account-social-page">
+<header id="account-social-header" class="page-header account-header account-social-header">
+<h1 id="account-social-title" class="page-title account-title">Linked accounts</h1>
+<p id="account-social-description" class="page-description account-description">Manage the social accounts associated with your citizen account.</p>
+</header>
+
+<section id="account-discord" class="page-section account-section social-account-section discord-account-section">
+<h2 id="account-discord-title" class="section-title account-section-title">Discord</h2>
+<p id="account-discord-status" class="account-detail social-account-status">Username: <strong id="account-discord-username" class="social-username">$${{discord_username}}</strong></p>
+<div id="account-discord-connected" class="social-account-state social-account-connected" $${{discord_connected_hidden}}>
+<p id="account-discord-connected-description" class="account-description">This Discord account was verified through Discord OAuth2.</p>
+<form id="account-discord-unlink-form" class="account-form unlink-form" method="post" action="/account/discord/unlink">
+<button id="account-discord-unlink-button" class="form-button unlink-button" type="submit">Unlink Discord</button>
+</form>
+</div>
+<div id="account-discord-disconnected" class="social-account-state social-account-disconnected" $${{discord_disconnected_hidden}}>
+<p id="account-discord-disconnected-description" class="account-description">No Discord account is linked.</p>
+<p id="account-discord-link-navigation" class="page-navigation" $${{discord_link_hidden}}><a id="account-discord-link" class="navigation-link" href="/account/discord/link">Link Discord account</a></p>
+<p id="account-discord-unavailable" class="status-message" $${{discord_unavailable_hidden}}>Discord linking is not configured on this server.</p>
+</div>
+</section>
+
+<section id="account-reddit" class="page-section account-section social-account-section reddit-account-section">
+<h2 id="account-reddit-title" class="section-title account-section-title">Reddit</h2>
+<p id="account-reddit-wip" class="status-message"><strong>Work in progress</strong></p>
+<p id="account-reddit-status" class="account-detail social-account-status">Username: <strong id="account-reddit-username" class="social-username">$${{reddit_username}}</strong></p>
+<div id="account-reddit-connected" class="social-account-state social-account-connected" $${{reddit_connected_hidden}}>
+<form id="account-reddit-unlink-form" class="account-form unlink-form" method="post" action="/account/reddit/unlink">
+<button id="account-reddit-unlink-button" class="form-button unlink-button" type="submit">Unlink Reddit</button>
+</form>
+</div>
+<div id="account-reddit-disconnected" class="social-account-state social-account-disconnected" $${{reddit_disconnected_hidden}}>
+<p id="account-reddit-description" class="account-description">Automatic Reddit verification is not available.</p>
+<p id="account-reddit-link-navigation" class="page-navigation"><a id="account-reddit-link" class="navigation-link" href="/account/reddit/link">See why</a></p>
+</div>
+</section>
+
+<nav id="account-social-navigation" class="page-navigation account-navigation"><a id="account-social-back-link" class="navigation-link back-link" href="/account">Back to account</a></nav>
+</section>

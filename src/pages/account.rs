@@ -1,4 +1,4 @@
-use crate::pages::auth::html_escape;
+use crate::pages::auth::{CENSUS_MINISTER, SUPERADMIN, html_escape};
 use crate::pages::login::{AppState, logout_headers};
 use crate::pages::settings::theme_cookie;
 use crate::render::{render_page, theme_name, theme_options};
@@ -23,7 +23,8 @@ pub struct AccountRoleForm {
     role: i64,
 }
 
-pub async fn get_account_page(State(state): State<AppState>, jar: CookieJar) -> impl IntoResponse {
+#[allow(dead_code)]
+async fn get_account_page(State(state): State<AppState>, jar: CookieJar) -> impl IntoResponse {
     trace!("Handling account page request");
     let session_token = match jar.get("session") {
         Some(cookie) => cookie.value().to_string(),
@@ -37,12 +38,14 @@ pub async fn get_account_page(State(state): State<AppState>, jar: CookieJar) -> 
 
     trace!("Retrieving account details");
     let query = sqlx::query(
-        "SELECT citizens.id AS citizen_id, citizens.role, authentik_identities.preferred_username, authentik_identities.email, authentik_identities.display_name,
+        "SELECT citizens.id AS citizen_id, citizens.uuid AS citizen_uuid, citizens.role, authentik_identities.preferred_username, authentik_identities.email, authentik_identities.display_name,
+                citizen_discord_links.discord_username, citizen_reddit_links.reddit_username,
                 COALESCE(user_setting.setting_value, '0') AS theme
         FROM sessions
-        JOIN authentik_identities
-        ON authentik_identities.citizen_id = sessions.associated_citizen_id
-        JOIN citizens ON citizens.id = sessions.associated_citizen_id
+        JOIN citizens ON citizens.uuid = sessions.associated_citizen_id
+        JOIN authentik_identities ON authentik_identities.citizen_id = citizens.uuid
+        LEFT JOIN citizen_discord_links ON citizen_discord_links.citizen_id = citizens.uuid
+        LEFT JOIN citizen_reddit_links ON citizen_reddit_links.citizen_id = citizens.uuid
         LEFT JOIN user_setting ON user_setting.user_uuid = citizens.uuid AND user_setting.setting_key = 'theme'
         WHERE sessions.auth_code_hash = $1
         AND sessions.expires_at > CURRENT_TIMESTAMP
@@ -55,11 +58,18 @@ pub async fn get_account_page(State(state): State<AppState>, jar: CookieJar) -> 
     match query {
         Ok(Some(row)) => {
             let citizen_id: i64 = row.get("citizen_id");
+            let citizen_uuid: uuid::Uuid = row.get("citizen_uuid");
             debug!(citizen_id, "Retrieved account details");
             let username: String = row.try_get("preferred_username").unwrap_or_default();
             let email: String = row.try_get("email").unwrap_or_default();
             let display_name: String = row.try_get("display_name").unwrap_or_default();
             let role: i64 = row.get("role");
+            let discord_username = row
+                .try_get::<Option<String>, _>("discord_username")
+                .unwrap_or_default();
+            let reddit_username = row
+                .try_get::<Option<String>, _>("reddit_username")
+                .unwrap_or_default();
             let theme = row
                 .try_get::<String, _>("theme")
                 .unwrap_or_else(|_| "0".to_string())
@@ -76,7 +86,7 @@ pub async fn get_account_page(State(state): State<AppState>, jar: CookieJar) -> 
                  AND revoked_at IS NULL
                  ORDER BY created_at DESC",
             )
-            .bind(citizen_id)
+            .bind(citizen_uuid)
             .bind(&auth_code_hash)
             .fetch_all(&state.pool)
             .await;
@@ -144,6 +154,73 @@ pub async fn get_account_page(State(state): State<AppState>, jar: CookieJar) -> 
                 .replace("$${{username}}", &html_escape(&username))
                 .replace("$${{email}}", &html_escape(&email))
                 .replace("$${{display_name}}", &html_escape(&display_name))
+                .replace(
+                    "$${{discord_username}}",
+                    &html_escape(discord_username.as_deref().unwrap_or("Not linked")),
+                )
+                .replace(
+                    "$${{discord_connected_hidden}}",
+                    if discord_username.is_some() {
+                        ""
+                    } else {
+                        "hidden"
+                    },
+                )
+                .replace(
+                    "$${{discord_disconnected_hidden}}",
+                    if discord_username.is_none() {
+                        ""
+                    } else {
+                        "hidden"
+                    },
+                )
+                .replace(
+                    "$${{discord_unavailable_hidden}}",
+                    if state.discord_client_id.is_some() && state.discord_client_secret.is_some() {
+                        "hidden"
+                    } else {
+                        ""
+                    },
+                )
+                .replace(
+                    "$${{discord_link_hidden}}",
+                    if discord_username.is_none()
+                        && state.discord_client_id.is_some()
+                        && state.discord_client_secret.is_some()
+                    {
+                        ""
+                    } else {
+                        "hidden"
+                    },
+                )
+                .replace(
+                    "$${{reddit_username}}",
+                    &html_escape(reddit_username.as_deref().unwrap_or("Not linked")),
+                )
+                .replace(
+                    "$${{reddit_connected_hidden}}",
+                    if reddit_username.is_some() {
+                        ""
+                    } else {
+                        "hidden"
+                    },
+                )
+                .replace(
+                    "$${{reddit_disconnected_hidden}}",
+                    if reddit_username.is_none() {
+                        ""
+                    } else {
+                        "hidden"
+                    },
+                )
+                .replace(
+                    "$${{census_management_hidden}}",
+                    if role & (CENSUS_MINISTER | SUPERADMIN) != 0 {
+                        ""
+                    } else {
+                        "hidden"
+                    },
+                )
                 .replace("$${{role}}", &role.to_string())
                 .replace("$${{current_theme}}", theme_name(theme))
                 .replace("$${{theme_options}}", &theme_options(theme))
@@ -242,11 +319,11 @@ pub async fn post_delete_account_session(
         }
         Ok(Some(false)) => {
             info!(%session_uuid, current_session = false, "Revoked account session");
-            Redirect::to("/account").into_response()
+            Redirect::to("/account/sessions").into_response()
         }
         Ok(None) => {
             warn!(%session_uuid, "Session revocation found no accessible active session");
-            Redirect::to("/account").into_response()
+            Redirect::to("/account/sessions").into_response()
         }
         Err(error) => {
             error!(?error, "Failed to revoke account session");
@@ -323,7 +400,7 @@ pub async fn post_account_theme(
     Form(form): Form<AccountThemeForm>,
 ) -> Response {
     trace!(theme = form.theme, "Handling account theme update");
-    if form.theme != 0 {
+    if form.theme > 2 {
         warn!(theme = form.theme, "Rejected unknown account theme");
         return (
             StatusCode::BAD_REQUEST,
@@ -344,7 +421,7 @@ pub async fn post_account_theme(
     let query = sqlx::query(
         "INSERT INTO user_setting (user_uuid, setting_key, setting_value, last_updated_by_user_uuid)
          SELECT citizens.uuid, 'theme', $1, citizens.uuid
-         FROM sessions JOIN citizens ON citizens.id = sessions.associated_citizen_id
+         FROM sessions JOIN citizens ON citizens.uuid = sessions.associated_citizen_id
          WHERE sessions.auth_code_hash = $2 AND sessions.expires_at > CURRENT_TIMESTAMP AND sessions.revoked_at IS NULL
          ON CONFLICT (user_uuid, setting_key) DO UPDATE
          SET setting_value = EXCLUDED.setting_value, last_updated_by_user_uuid = EXCLUDED.last_updated_by_user_uuid",
@@ -357,7 +434,11 @@ pub async fn post_account_theme(
     match query {
         Ok(result) if result.rows_affected() == 1 => {
             info!(theme = form.theme, "Saved account theme");
-            (theme_cookie(form.theme), Redirect::to("/account")).into_response()
+            (
+                theme_cookie(form.theme),
+                Redirect::to("/account/appearance"),
+            )
+                .into_response()
         }
         Ok(result) => {
             warn!(
@@ -390,7 +471,11 @@ pub async fn post_account_role(
 ) -> Response {
     trace!(role = form.role, "Handling account role update");
     if state.app_mode != 1 {
-        warn!(role = form.role, app_mode = state.app_mode, "Rejected account role update outside staging mode");
+        warn!(
+            role = form.role,
+            app_mode = state.app_mode,
+            "Rejected account role update outside staging mode"
+        );
         return (
             StatusCode::FORBIDDEN,
             Html(
@@ -404,7 +489,10 @@ pub async fn post_account_role(
             .into_response();
     }
     let Some(session_token) = jar.get("session").map(|cookie| cookie.value().to_string()) else {
-        debug!(role = form.role, "Redirecting account role update without a session");
+        debug!(
+            role = form.role,
+            "Redirecting account role update without a session"
+        );
         return Redirect::to("/login").into_response();
     };
     let query = sqlx::query(
@@ -418,7 +506,7 @@ pub async fn post_account_role(
          UPDATE citizens
          SET role = $1
          FROM current_session
-         WHERE citizens.id = current_session.associated_citizen_id",
+         WHERE citizens.uuid = current_session.associated_citizen_id",
     )
     .bind(form.role)
     .bind(crate::backend::login_oauth::hash_token(&session_token))
@@ -431,7 +519,11 @@ pub async fn post_account_role(
             Redirect::to("/account").into_response()
         }
         Ok(result) => {
-            warn!(rows_affected = result.rows_affected(), role = form.role, "Account role update did not resolve an active session");
+            warn!(
+                rows_affected = result.rows_affected(),
+                role = form.role,
+                "Account role update did not resolve an active session"
+            );
             Redirect::to("/login").into_response()
         }
         Err(error) => {

@@ -1,8 +1,7 @@
 <li id="managed-election-item" class="item managed-election-item">
-    <span id="managed-election-name" class="election-name">Season $${{season}}: $${{name}}</span>
-    <span id="managed-election-status" class="election-status">($${{status}})</span> -
-    <a id="managed-election-edit-link" class="navigation-link edit-link" href="/manage/elections/$${{election_uuid}}/edit">Edit</a> -
-    <a id="managed-election-status-link" class="navigation-link status-link" href="/manage/elections/$${{election_uuid}}/status">Status</a> -
-    <a id="managed-election-candidates-link" class="navigation-link candidates-link" href="/elections/$${{election_uuid}}/candidates">Candidates</a> -
-    <a id="managed-election-changes-link" class="navigation-link changes-link" href="/elections/$${{election_uuid}}/changes">Changes</a>
+    <article id="managed-election-summary-$${{election_uuid}}" class="item-summary election-summary">
+        <h3 id="managed-election-name-$${{election_uuid}}" class="item-title election-name"><a id="managed-election-link-$${{election_uuid}}" class="navigation-link election-link" href="/manage/elections/$${{election_uuid}}">Season $${{season}}: $${{name}}</a></h3>
+        <p id="managed-election-status-$${{election_uuid}}" class="item-detail election-status">Current status: $${{status}}</p>
+        <p id="managed-election-action-$${{election_uuid}}" class="item-navigation election-navigation"><a id="managed-election-open-link-$${{election_uuid}}" class="navigation-link action-link" href="/manage/elections/$${{election_uuid}}">Open management dashboard</a></p>
+    </article>
 </li>

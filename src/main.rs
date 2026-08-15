@@ -23,15 +23,20 @@ mod render;
 use error_handling::{error_method, error_not_found};
 use pages::login::AppState;
 use pages::{
-    get_about, get_account_page, get_candidate_registration, get_debug, get_edit_election,
+    get_about, get_account_appearance, get_account_overview, get_account_sessions,
+    get_account_social, get_candidate_registration, get_census, get_census_month, get_contact,
+    get_debug, get_discord_callback, get_discord_link, get_edit_election, get_election,
     get_election_candidates, get_election_changes, get_elections, get_homepage,
     get_list_themes_page, get_login, get_login_oauth, get_login_oauth_callback,
     get_login_oauth_complete, get_login_oauth_device, get_login_oauth_manual_check,
-    get_login_oauth_status, get_logout, get_manage_election_status, get_manage_elections,
-        get_settings, get_userinfo, login_threads, post_account_role, post_account_theme, post_candidate_registration,
-    post_debug, post_delete_account_session, post_delete_all_account_sessions, post_edit_election,
-    post_election_status, post_manage_council_candidate, post_manage_elections,
-    post_manage_presidential_ticket, post_settings, post_withdraw_candidate, get_contact, get_staging
+    get_login_oauth_status, get_logout, get_manage_election, get_manage_election_candidates,
+    get_manage_election_status, get_manage_elections, get_management, get_new_election,
+    get_reddit_link, get_settings, get_staging, get_userinfo, login_threads, post_account_role,
+    post_account_theme, post_activate_census, post_candidate_registration, post_create_census,
+    post_debug, post_delete_account_session, post_delete_all_account_sessions, post_discord_unlink,
+    post_edit_election, post_election_status, post_manage_council_candidate, post_manage_elections,
+    post_manage_presidential_ticket, post_reddit_unlink, post_settings, post_update_census_citizen,
+    post_withdraw_candidate,
 };
 
 #[tokio::main]
@@ -127,7 +132,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             _ => {
                 warn!("APP_MODE is set to an invalid value, defaulting to 2 (production)");
                 warn!("It is recommended to set APP_MODE for a more predictable behavior.");
-                warn!("Valid values for APP_MODE are: 0 = development, 1 = staging, 2 = production");
+                warn!(
+                    "Valid values for APP_MODE are: 0 = development, 1 = staging, 2 = production"
+                );
                 2
             }
         },
@@ -140,6 +147,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     info!(app_mode, "Application mode resolved");
+
+    let (discord_client_id, discord_client_secret) =
+        get_discord_oauth_configuration(&oauth_info.public_host);
 
     let state = AppState {
         pool,
@@ -154,7 +164,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         oauth_scope: oauth_info.scope,
         public_host: oauth_info.public_host,
         http_client: reqwest::Client::new(),
-        app_mode
+        app_mode,
+        discord_client_id,
+        discord_client_secret,
     };
     debug!(
         device_login_configured = state.oauth_device_authorization_url.is_some(),
@@ -182,6 +194,7 @@ async fn build_router(state: AppState) -> Router {
         .route("/", get(get_homepage))
         .route("/about", get(get_about))
         .route("/elections", get(get_elections))
+        .route("/elections/{election_uuid}", get(get_election))
         .route("/login", get(get_login))
         .route("/login/oauth", get(get_login_oauth))
         .route("/login/oauth/device", get(get_login_oauth_device))
@@ -200,9 +213,17 @@ async fn build_router(state: AppState) -> Router {
         )
         .route("/logout", post(get_logout))
         .route("/userinfo", get(get_userinfo))
-        .route("/account", get(get_account_page))
+        .route("/account", get(get_account_overview))
+        .route("/account/social", get(get_account_social))
+        .route("/account/appearance", get(get_account_appearance))
+        .route("/account/sessions", get(get_account_sessions))
         .route("/account/set-theme", post(post_account_theme))
-            .route("/account/set-role", post(post_account_role))
+        .route("/account/set-role", post(post_account_role))
+        .route("/account/discord/link", get(get_discord_link))
+        .route("/account/discord/callback", get(get_discord_callback))
+        .route("/account/discord/unlink", post(post_discord_unlink))
+        .route("/account/reddit/link", get(get_reddit_link))
+        .route("/account/reddit/unlink", post(post_reddit_unlink))
         .route(
             "/account/sessions/{session_uuid}/delete",
             post(post_delete_account_session),
@@ -215,6 +236,12 @@ async fn build_router(state: AppState) -> Router {
             "/manage/elections",
             get(get_manage_elections).post(post_manage_elections),
         )
+        .route("/manage/elections/new", get(get_new_election))
+        .route(
+            "/manage/elections/{election_uuid}",
+            get(get_manage_election),
+        )
+        .route("/manage", get(get_management))
         .route(
             "/manage/elections/{election_uuid}/edit",
             get(get_edit_election).post(post_edit_election),
@@ -222,6 +249,10 @@ async fn build_router(state: AppState) -> Router {
         .route(
             "/manage/elections/{election_uuid}/status",
             get(get_manage_election_status).post(post_election_status),
+        )
+        .route(
+            "/manage/elections/{election_uuid}/candidates",
+            get(get_manage_election_candidates),
         )
         .route(
             "/manage/elections/{election_uuid}/status/council/{candidate_uuid}",
@@ -251,6 +282,16 @@ async fn build_router(state: AppState) -> Router {
         .route("/themes", get(get_list_themes_page))
         .route("/settings", get(get_settings).post(post_settings))
         .route("/staging", get(get_staging))
+        .route("/manage/census", get(get_census).post(post_create_census))
+        .route("/manage/census/{census_uuid}", get(get_census_month))
+        .route(
+            "/manage/census/{census_uuid}/activate",
+            post(post_activate_census),
+        )
+        .route(
+            "/manage/census/{census_uuid}/citizens/{citizen_uuid}",
+            post(post_update_census_citizen),
+        )
         .fallback(error_not_found)
         .layer(middleware::from_fn(log_request));
 
@@ -338,6 +379,71 @@ struct OAuthInfo {
     issuer: String,
     scope: String,
     public_host: String,
+}
+
+fn get_discord_oauth_configuration(public_host: &str) -> (Option<String>, Option<String>) {
+    trace!("Reading Discord OAuth configuration");
+    let client_id = env::var("DISCORD_CLIENT_ID")
+        .ok()
+        .filter(|value| !value.trim().is_empty());
+    let client_secret = env::var("DISCORD_CLIENT_SECRET")
+        .ok()
+        .filter(|value| !value.trim().is_empty());
+    let redirect_uri = format!(
+        "{}/account/discord/callback",
+        public_host.trim_end_matches('/')
+    );
+
+    match (&client_id, &client_secret) {
+        (Some(client_id), Some(_)) => {
+            info!(
+                %client_id,
+                %redirect_uri,
+                scope = "identify",
+                "Discord OAuth account linking is configured"
+            );
+            info!(
+                %redirect_uri,
+                "Discord OAuth callback must be registered as a redirect URI in the Discord Developer Portal"
+            );
+        }
+        (None, None) => {
+            warn!(
+                "Discord OAuth account linking is disabled because DISCORD_CLIENT_ID and DISCORD_CLIENT_SECRET are not set"
+            );
+            warn!(
+                %redirect_uri,
+                "To enable Discord linking, set DISCORD_CLIENT_ID and DISCORD_CLIENT_SECRET, then register this callback in the Discord Developer Portal"
+            );
+        }
+        (Some(client_id), None) => {
+            error!(
+                %client_id,
+                missing_variable = "DISCORD_CLIENT_SECRET",
+                "Discord OAuth configuration is incomplete, so account linking is disabled"
+            );
+            error!(
+                %redirect_uri,
+                "Set DISCORD_CLIENT_SECRET and register this callback in the Discord Developer Portal"
+            );
+        }
+        (None, Some(_)) => {
+            error!(
+                missing_variable = "DISCORD_CLIENT_ID",
+                "Discord OAuth configuration is incomplete, so account linking is disabled"
+            );
+            error!(
+                %redirect_uri,
+                "Set DISCORD_CLIENT_ID and register this callback in the Discord Developer Portal"
+            );
+        }
+    }
+
+    if client_id.is_some() && client_secret.is_some() {
+        (client_id, client_secret)
+    } else {
+        (None, None)
+    }
 }
 
 #[derive(Deserialize)]

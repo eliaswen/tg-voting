@@ -12,6 +12,51 @@
 <p id="account-edit-description" class="account-description account-edit-description">If you'd like to edit your account information, do so on <a id="account-authentik-link" class="external-link account-edit-link" href="https://auth.ewenlau.net/if/user/#/settings">Authentik</a>.</p>
 </section>
 
+<section id="account-social-accounts" class="page-section account-section social-accounts-section">
+<header id="account-social-accounts-header" class="section-header social-accounts-header">
+<h2 id="account-social-accounts-title" class="section-title account-section-title social-accounts-title">Linked Social Accounts</h2>
+<p id="account-social-accounts-description" class="account-description social-accounts-description">Linked accounts help election and census staff identify the correct citizen account. Linking an account does not let this site post messages or make changes to that account.</p>
+</header>
+
+<article id="account-discord" class="account-social-account social-account discord-account">
+<header id="account-discord-header" class="social-account-header discord-account-header">
+<h3 id="account-discord-title" class="social-account-title discord-account-title">Discord</h3>
+</header>
+<p id="account-discord-status" class="account-detail social-account-status discord-account-status">Discord username: <span id="account-discord-username" class="account-detail-value social-username discord-username">$${{discord_username}}</span>
+</p>
+<div id="account-discord-connected" class="social-account-state social-account-connected discord-account-connected" $${{discord_connected_hidden}}>
+<p id="account-discord-connected-description" class="account-description social-account-description discord-account-description">Your Discord account is linked and verified with Discord.</p>
+<form id="account-discord-unlink-form" class="account-form social-account-form unlink-form discord-unlink-form" method="post" action="/account/discord/unlink">
+<button id="account-discord-unlink-button" class="form-button social-account-button unlink-button discord-unlink-button" type="submit">Unlink Discord account</button>
+</form>
+</div>
+<div id="account-discord-disconnected" class="social-account-state social-account-disconnected discord-account-disconnected" $${{discord_disconnected_hidden}}>
+<p id="account-discord-disconnected-description" class="account-description social-account-description discord-account-description">No Discord account is linked to your citizen account.</p>
+<p id="account-discord-link-navigation" class="page-navigation social-account-navigation discord-account-navigation" $${{discord_link_hidden}}><a id="account-discord-link" class="navigation-link social-account-link discord-link" href="/account/discord/link"><button id="account-discord-link-button" class="navigation-button social-account-button link-button discord-link-button">Link a Discord account</button></a></p>
+<p id="account-discord-unavailable" class="status-message social-account-unavailable discord-account-unavailable" $${{discord_unavailable_hidden}}>Discord linking is not configured on this server.</p>
+</div>
+</article>
+
+<article id="account-reddit" class="account-social-account social-account reddit-account">
+<header id="account-reddit-header" class="social-account-header reddit-account-header">
+<h3 id="account-reddit-title" class="social-account-title reddit-account-title">Reddit</h3>
+<p id="account-reddit-wip-label" class="status-message work-in-progress-label reddit-wip-label"><strong>Work in progress</strong></p>
+</header>
+<p id="account-reddit-status" class="account-detail social-account-status reddit-account-status">Reddit username: <span id="account-reddit-username" class="account-detail-value social-username reddit-username">$${{reddit_username}}</span>
+</p>
+<div id="account-reddit-connected" class="social-account-state social-account-connected reddit-account-connected" $${{reddit_connected_hidden}}>
+<p id="account-reddit-connected-description" class="account-description social-account-description reddit-account-description">A Reddit username is currently associated with your citizen account. Automatic Reddit verification is not available yet.</p>
+<form id="account-reddit-unlink-form" class="account-form social-account-form unlink-form reddit-unlink-form" method="post" action="/account/reddit/unlink">
+<button id="account-reddit-unlink-button" class="form-button social-account-button unlink-button reddit-unlink-button" type="submit">Unlink Reddit account</button>
+</form>
+</div>
+<div id="account-reddit-disconnected" class="social-account-state social-account-disconnected reddit-account-disconnected" $${{reddit_disconnected_hidden}}>
+<p id="account-reddit-disconnected-description" class="account-description social-account-description reddit-account-description">No Reddit account is linked to your citizen account. The Reddit linking flow is still being built.</p>
+<p id="account-reddit-link-navigation" class="page-navigation social-account-navigation reddit-account-navigation"><a id="account-reddit-link" class="navigation-link social-account-link reddit-link" href="/account/reddit/link"><button id="account-reddit-link-button" class="navigation-button social-account-button link-button reddit-link-button">View Reddit linking status</button></a></p>
+</div>
+</article>
+</section>
+
 <section id="account-settings" class="page-section account-section account-settings-section">
 <h2 id="account-settings-title" class="section-title account-section-title">Server Settings</h2>
 <h3 id="account-theme-description" class="setting-description theme-description">The theme you get is set by your cookies, and is local, but is removed once you log out. You can set a theme in your account that applies whenever you log in.</h3>
@@ -43,6 +88,14 @@ $${{session_items}}
 <form id="account-delete-all-sessions-form" class="account-form session-form delete-all-sessions-form" method="post" action="/account/sessions/delete-all">
     <button id="account-delete-all-sessions-button" class="form-button session-button delete-all-sessions-button" type="submit">Log out of all sessions</button>
 </form>
+</section>
+
+<section id="account-management" class="page-section account-section account-management-section" $${{census_management_hidden}}>
+<h2 id="account-management-title" class="section-title account-section-title management-title">Management</h2>
+<p id="account-census-management-description" class="account-description management-description">Your account has permission to manage monthly census records and citizen census statuses.</p>
+<nav id="account-management-navigation" class="page-navigation account-management-navigation">
+<a id="account-census-management-link" class="navigation-link management-link census-management-link" href="/manage/census">Manage census records</a>
+</nav>
 </section>
 
 <section id="account-actions" class="page-section account-section account-actions-section">

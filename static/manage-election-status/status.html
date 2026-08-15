@@ -1,5 +1,9 @@
 <section id="election-status-page" class="page manage-page election-status-page">
+    <header id="election-status-header" class="page-header manage-header election-header status-header">
+    <p id="election-status-context" class="page-context election-context"><a id="election-status-dashboard-link" class="navigation-link back-link" href="/manage/elections/$${{election_uuid}}">Election dashboard</a></p>
     <h1 id="election-status-title" class="page-title manage-title">Season $${{season}} status</h1>
+    <p id="election-status-description" class="page-description manage-description">Change the operating status for $${{name}}. Every status change requires a reason and is added to the public change log.</p>
+    </header>
     <section id="election-status-summary" class="page-section status-summary-section">
         <p id="election-status-name" class="election-detail election-name">Name: <span id="election-status-name-value" class="detail-value">$${{name}}</span>
 </p>
@@ -26,18 +30,7 @@
 <button id="election-status-submit" class="form-button submit-button" type="submit">Change status</button>
 </form>
 </section>
-    <section id="presidential-tickets-section" class="page-section candidates-section presidential-tickets-section">
-<h2 id="presidential-tickets-title" class="section-title candidates-section-title">Presidential tickets</h2>$${{presidential_forms}}<p id="managed-presidential-tickets-empty" class="empty-state candidates-empty-state" $${{presidential_empty_hidden}}>No presidential tickets are registered.</p>
-</section>
-    <section id="managed-council-section" class="page-section candidates-section managed-council-section">
-<h2 id="managed-council-title" class="section-title candidates-section-title">Council candidates</h2>$${{council_forms}}<p id="managed-council-candidates-empty" class="empty-state candidates-empty-state" $${{council_empty_hidden}}>No council candidates are registered.</p>
-</section>
-    <section id="former-vice-presidents-section" class="page-section candidates-section former-vice-presidents-section">
-<h2 id="former-vice-presidents-title" class="section-title candidates-section-title">Former vice presidents</h2>
-<ul id="former-vice-presidents-list" class="item-list candidates-list former-vice-presidents-list">$${{former_vice_presidents}}<li id="former-vice-presidents-empty" class="item empty-state candidates-empty-state" $${{former_vice_presidents_empty_hidden}}>No former vice presidents.</li>
-</ul>
-</section>
     <nav id="election-status-navigation" class="page-navigation manage-navigation">
-<a id="election-status-changes-link" class="navigation-link changes-link" href="/elections/$${{election_uuid}}/changes">Public change log</a> | <a id="election-status-back-link" class="navigation-link back-link" href="/manage/elections">Back to elections</a>
+<a id="election-status-candidates-link" class="navigation-link candidates-link" href="/manage/elections/$${{election_uuid}}/candidates">Manage candidates</a> | <a id="election-status-changes-link" class="navigation-link changes-link" href="/elections/$${{election_uuid}}/changes">Public change log</a> | <a id="election-status-back-link" class="navigation-link back-link" href="/manage/elections/$${{election_uuid}}">Back to election dashboard</a>
 </nav>
 </section>

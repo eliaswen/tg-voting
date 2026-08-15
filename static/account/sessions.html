@@ -1,0 +1,22 @@
+<section id="account-sessions-page" class="page account-page account-subpage account-sessions-page">
+<header id="account-sessions-header" class="page-header account-header account-sessions-header">
+<h1 id="account-sessions-title" class="page-title account-title">Sessions</h1>
+<p id="account-sessions-description" class="page-description account-description">Review devices currently logged in to your account.</p>
+</header>
+<form id="account-sessions-search-form" class="search-form sessions-search-form" method="get" action="/account/sessions">
+<label id="account-sessions-search-label" class="form-label search-label" for="account-sessions-search-input">Search sessions</label>
+<input id="account-sessions-search-input" class="form-control search-input" type="search" name="q" value="$${{search_query}}" placeholder="Device name or type">
+<button id="account-sessions-search-submit" class="form-button search-button" type="submit">Search</button>
+<a id="account-sessions-search-clear" class="navigation-link clear-search-link" href="/account/sessions">Clear</a>
+</form>
+<section id="account-session-results" class="page-section account-section account-session-results">
+<p id="account-sessions-empty" class="empty-state sessions-empty" $${{sessions_empty_hidden}}>No active sessions matched your search.</p>
+<div id="account-session-list" class="account-session-list session-list">$${{session_items}}</div>
+</section>
+<section id="account-session-actions" class="page-section account-section account-session-actions">
+<form id="account-delete-all-sessions-form" class="account-form session-form delete-all-sessions-form" method="post" action="/account/sessions/delete-all">
+<button id="account-delete-all-sessions-button" class="form-button session-button delete-all-sessions-button" type="submit">Log out of all sessions</button>
+</form>
+</section>
+<nav id="account-sessions-navigation" class="page-navigation account-navigation"><a id="account-sessions-back-link" class="navigation-link back-link" href="/account">Back to account</a></nav>
+</section>

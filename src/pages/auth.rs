@@ -10,10 +10,12 @@ use crate::backend::login_oauth::hash_token;
 use crate::pages::login::AppState;
 
 pub const ELECTION_MINISTER: i64 = 1 << 3;
+pub const CENSUS_MINISTER: i64 = 1 << 2;
 pub const SUPERADMIN: i64 = 1 << 5;
 
 pub struct AuthenticatedCitizen {
     pub id: i64,
+    pub uuid: uuid::Uuid,
     pub role: i64,
     pub banned: bool,
     pub display_name: String,
@@ -33,14 +35,14 @@ pub async fn current_citizen(
     };
 
     let citizen = sqlx::query(
-        "SELECT citizens.id, citizens.role, citizens.banned,
+        "SELECT citizens.id, citizens.uuid, citizens.role, citizens.banned,
                 COALESCE(NULLIF(authentik_identities.display_name, ''),
                          NULLIF(authentik_identities.preferred_username, ''),
                          NULLIF(authentik_identities.email, ''),
                          'Citizen ' || citizens.id::text) AS display_name
          FROM sessions
-         JOIN citizens ON citizens.id = sessions.associated_citizen_id
-         LEFT JOIN authentik_identities ON authentik_identities.citizen_id = citizens.id
+         JOIN citizens ON citizens.uuid = sessions.associated_citizen_id
+         LEFT JOIN authentik_identities ON authentik_identities.citizen_id = citizens.uuid
          WHERE sessions.auth_code_hash = $1
          AND sessions.expires_at > CURRENT_TIMESTAMP
          AND sessions.revoked_at IS NULL",
@@ -53,6 +55,7 @@ pub async fn current_citizen(
         Ok(Some(citizen)) => {
             let citizen = AuthenticatedCitizen {
                 id: citizen.get("id"),
+                uuid: citizen.get("uuid"),
                 role: citizen.get("role"),
                 banned: citizen.get("banned"),
                 display_name: citizen.get("display_name"),
@@ -136,6 +139,35 @@ pub async fn require_election_manager(
         citizen_id = citizen.id,
         role = citizen.role,
         "Election manager authorization succeeded"
+    );
+    Ok(citizen)
+}
+
+pub async fn require_census_manager(
+    state: &AppState,
+    jar: &CookieJar,
+) -> Result<AuthenticatedCitizen, Response> {
+    trace!("Requiring census manager");
+    let citizen = require_citizen(state, jar).await?;
+    if citizen.role & (CENSUS_MINISTER | SUPERADMIN) == 0 {
+        warn!(
+            citizen_id = citizen.id,
+            role = citizen.role,
+            "Rejected citizen without census management permission"
+        );
+        return Err((
+            StatusCode::FORBIDDEN,
+            Html(include_str!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/static/errors/forbidden.html"
+            ))),
+        )
+            .into_response());
+    }
+    debug!(
+        citizen_id = citizen.id,
+        role = citizen.role,
+        "Census manager authorization succeeded"
     );
     Ok(citizen)
 }

@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html id="document" class="document theme-document black-simple-theme-document" lang="en">
+<head id="document-head" class="document-head theme-head black-simple-theme-head">
+<meta id="document-charset" class="document-meta charset-meta" charset="utf-8">
+<meta id="document-viewport" class="document-meta viewport-meta" name="viewport" content="width=device-width, initial-scale=1">
+<title id="document-title" class="document-title">$${{page_title}}</title>
+<style>
+html { background: #181818; color: #e6e6e6; color-scheme: dark; font-family: Arial, sans-serif; }
+body {
+    max-width: 1100px;
+    min-height: 100vh;
+    margin: 0 auto;
+    padding: 0 18px;
+    line-height: 1.45;
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+}
+a { color: #8ebbea; }
+a:hover { color: #b8d8f5; }
+.site-header, .site-footer { padding: 18px 0; }
+.page-content {
+    background: #222;
+    border: 1px solid #444;
+    padding: 24px;
+    flex: 1;
+}
+.page-header, .section-header { margin-bottom: 18px; }
+.page-title, .section-title { margin-top: 0; }
+.page-section { margin: 28px 0; }
+.site-navigation a, .page-navigation a, .item-navigation a { text-decoration: none; }
+.navigation-button, .form-button { background: #303030; border: 1px solid #666; border-radius: 3px; color: #e6e6e6; cursor: pointer; padding: 7px 11px; }
+.navigation-button:hover, .form-button:hover { background: #3d3d3d; }
+.action-link {
+    background: #303030;
+    border: 1px solid #666;
+    border-radius: 3px;
+    color: #e6e6e6;
+    display: inline-block;
+    padding: 6px 10px;
+    text-decoration: none;
+}
+.action-link:hover { background: #3d3d3d; color: #fff; }
+.form-control { background: #292929; border: 1px solid #666; border-radius: 3px; box-sizing: border-box; color: #eee; padding: 7px; }
+.form-control::placeholder { color: #aaa; }
+.manage-form { max-width: 760px; }
+.form-field { margin: 13px 0; }
+.form-label { display: block; font-weight: bold; margin-bottom: 4px; }
+.manage-form .text-input, .manage-form .datetime-input, .manage-form .candidate-select, .manage-form .reason-input { max-width: 520px; width: 100%; }
+.search-input { min-width: 260px; }
+.item-list { padding-left: 22px; }
+.item { margin: 14px 0; }
+.management-navigation-item { border: 1px solid #444; list-style: none; margin: 12px 0; padding: 16px; }
+.management-navigation-item .item-title { margin-top: 0; }
+.managed-candidate { border: 1px solid #444; margin: 18px 0; padding: 16px; }
+.managed-candidate > .item-title { margin-top: 0; }
+.detail-list dt { font-weight: bold; margin-top: 12px; }
+.detail-list dd { margin-left: 0; }
+.data-table { border-collapse: collapse; width: 100%; }
+.data-table th, .data-table td { border: 1px solid #4b4b4b; padding: 8px; text-align: left; vertical-align: top; }
+.data-table th { background: #303030; }
+.status-message, .empty-state { color: #bbb; }
+.error-message { color: #ff9e9e; }
+.account-navigation-list, .management-navigation-list { list-style: none; padding: 0; }
+.account-navigation-item, .management-navigation-item { border: 1px solid #444; margin: 10px 0; padding: 14px; }
+.search-form { background: #292929; border: 1px solid #444; margin: 18px 0; padding: 12px; }
+
+@media (max-width: 700px) {
+body { padding: 0 10px; }
+.page-content { padding: 15px; }
+.header-layout, .header-layout tbody, .header-layout tr, .header-layout td { display: block; width: auto; text-align: left; }
+.header-layout td { margin: 8px 0; }
+.table-container { overflow-x: auto; }
+.search-input { min-width: 0; width: 100%; }
+}
+</style>
+</head>
+<body id="document-body" class="document-body theme-body black-simple-theme-body">
+<header id="site-header" class="site-header black-simple-theme-header">
+<table id="header-layout" class="layout-table header-layout" width="100%">
+<tr id="header-layout-row" class="layout-row header-layout-row">
+<td id="header-brand-cell" class="layout-cell brand-cell" width="250">
+<strong id="site-brand" class="site-brand">TeenGovernment Voting</strong><br>
+<small id="preview-notice" class="preview-notice">Early Preview</small>
+</td>
+<td id="header-navigation-cell" class="layout-cell navigation-cell" align="center">
+<nav id="site-navigation" class="site-navigation header-navigation">
+<a id="header-home-link" class="navigation-link home-link" href="/">Home</a> |
+<a id="header-elections-link" class="navigation-link elections-link" href="/elections">Elections</a> |
+<a id="header-settings-link" class="navigation-link settings-link" href="/settings">Settings</a>$${{management_navigation}} |
+<a id="header-about-link" class="navigation-link about-link" href="/about">About</a>
+</nav>
+</td>
+<td id="header-account-cell" class="layout-cell account-cell" width="250" align="right">
+<a id="header-account-link" class="navigation-link account-link" href="$${{login_url}}"><button id="header-account-button" class="navigation-button account-button">$${{login_button_text}}</button></a>
+</td>
+</tr>
+</table>
+</header>
+
+<main id="page-content" class="page-content theme-content black-simple-theme-content">
+$${{page_content}}
+</main>
+
+<footer id="site-footer" class="site-footer black-simple-theme-footer">
+<table id="footer-layout" class="layout-table footer-layout" width="100%">
+<tr id="footer-layout-row" class="layout-row footer-layout-row">
+<td id="footer-copyright-cell" class="layout-cell copyright-cell" width="300">
+<small id="footer-copyright" class="footer-copyright">Early preview<br><a id="footer-source-link" class="external-link source-link" href="https://github.com/eliaswen/tg-voting">Copyright © ewi and contributors</a></small>
+</td>
+<td id="footer-navigation-cell" class="layout-cell navigation-cell" align="center">
+<nav id="footer-navigation" class="site-navigation footer-navigation">
+<a id="footer-home-link" class="navigation-link home-link" href="/">Home</a> |
+<a id="footer-about-link" class="navigation-link about-link" href="/about">About</a> |
+<a id="footer-elections-link" class="navigation-link elections-link" href="/elections">Elections</a>
+</nav>
+</td>
+<td id="footer-theme-cell" class="layout-cell theme-cell" width="300" align="right">
+<small id="footer-theme-description" class="theme-description">black-simple theme. Change appearance in <a id="footer-settings-link" class="navigation-link settings-link" href="/settings">settings</a>.</small>
+</td>
+</tr>
+</table>
+</footer>
+</body>
+</html>
