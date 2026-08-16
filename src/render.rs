@@ -1,7 +1,30 @@
+use askama::Template;
 use axum::response::Html;
 use axum_extra::extract::cookie::CookieJar;
 use sqlx::Row;
 use tracing::{debug, error, trace};
+
+pub fn timezone(cookies: &CookieJar) -> String {
+    let value = cookies
+        .get("timezone")
+        .and_then(|cookie| urlencoding::decode(cookie.value()).ok())
+        .map(|value| value.into_owned())
+        .unwrap_or_else(|| "UTC".to_string());
+    if valid_timezone(&value) {
+        value
+    } else {
+        "UTC".to_string()
+    }
+}
+
+pub fn valid_timezone(value: &str) -> bool {
+    value == "UTC"
+        || value.chars().all(|character| {
+            character.is_ascii_alphanumeric() || matches!(character, '/' | '_' | '-' | '+')
+        }) && std::path::Path::new("/usr/share/zoneinfo")
+            .join(value)
+            .is_file()
+}
 
 pub fn theme_name(theme: u8) -> &'static str {
     trace!(theme, "Resolving theme name");
@@ -13,28 +36,62 @@ pub fn theme_name(theme: u8) -> &'static str {
     }
 }
 
-pub fn theme_options(current_theme: u8) -> String {
-    trace!(current_theme, "Rendering theme options");
-    let option = include_str!(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/static/themes/theme-option.html"
-    ));
-    [(0, "Basic"), (1, "white-simple"), (2, "black-simple")]
-        .into_iter()
-        .map(|(theme_id, theme_name)| {
-            option
-                .replace("$${{theme_id}}", &theme_id.to_string())
-                .replace("$${{theme_name}}", theme_name)
-                .replace(
-                    "$${{selected}}",
-                    if current_theme == theme_id {
-                        "selected"
-                    } else {
-                        ""
-                    },
-                )
-        })
-        .collect()
+#[derive(Template)]
+#[template(path = "themes/basic-theme.html")]
+struct BasicTheme<'a> {
+    page_content: &'a str,
+    page_title: &'a str,
+    login_url: &'a str,
+    login_button_text: &'a str,
+    management_visible: bool,
+}
+
+#[derive(Template)]
+#[template(path = "themes/white-simple-theme.html")]
+struct WhiteSimpleTheme<'a> {
+    page_content: &'a str,
+    page_title: &'a str,
+    login_url: &'a str,
+    login_button_text: &'a str,
+    management_visible: bool,
+}
+
+#[derive(Template)]
+#[template(path = "themes/black-simple-theme.html")]
+struct BlackSimpleTheme<'a> {
+    page_content: &'a str,
+    page_title: &'a str,
+    login_url: &'a str,
+    login_button_text: &'a str,
+    management_visible: bool,
+}
+
+#[derive(Template)]
+#[template(path = "errors/error.html")]
+struct ThemeRenderError {
+    title: &'static str,
+    message: &'static str,
+    page_class: &'static str,
+    back_url: &'static str,
+    back_label: &'static str,
+    message_kind: u8,
+    social_help: bool,
+    back_period: bool,
+}
+
+impl ThemeRenderError {
+    const fn page() -> Self {
+        Self {
+            title: "Error",
+            message: "",
+            page_class: "theme-render-error-page",
+            back_url: "/settings",
+            back_label: "Return to settings",
+            message_kind: 6,
+            social_help: false,
+            back_period: false,
+        }
+    }
 }
 
 fn show_page_with_theme(
@@ -55,52 +112,61 @@ fn show_page_with_theme(
     };
 
     if theme <= 2 {
-        let template = match theme {
+        let rendered = match theme {
             0 => {
                 trace!(page_title, "Applied basic theme");
-                include_str!(concat!(
-                    env!("CARGO_MANIFEST_DIR"),
-                    "/static/themes/basic-theme.html"
-                ))
+                BasicTheme {
+                    page_content,
+                    page_title,
+                    login_url,
+                    login_button_text: &login_button_text,
+                    management_visible,
+                }
+                .render()
             }
             1 => {
                 trace!(page_title, "Applied white-simple theme");
-                include_str!(concat!(
-                    env!("CARGO_MANIFEST_DIR"),
-                    "/static/themes/white-simple-theme.html"
-                ))
+                WhiteSimpleTheme {
+                    page_content,
+                    page_title,
+                    login_url,
+                    login_button_text: &login_button_text,
+                    management_visible,
+                }
+                .render()
             }
             _ => {
                 trace!(page_title, "Applied black-simple theme");
-                include_str!(concat!(
-                    env!("CARGO_MANIFEST_DIR"),
-                    "/static/themes/black-simple-theme.html"
-                ))
+                BlackSimpleTheme {
+                    page_content,
+                    page_title,
+                    login_url,
+                    login_button_text: &login_button_text,
+                    management_visible,
+                }
+                .render()
             }
         };
-        Ok(Html(
-            template
-            .replace("$${{page_content}}", page_content)
-            .replace("$${{page_title}}", page_title)
-            .replace("$${{login_url}}", login_url)
-            .replace("$${{login_button_text}}", &login_button_text)
-            .replace(
-                "$${{management_navigation}}",
-                if management_visible {
-                    " | <a id=\"header-management-link\" class=\"navigation-link management-link\" href=\"/manage\">Management</a>"
-                } else {
-                    ""
-                },
-            )
-            .to_string(),
-        ))
+        Ok(Html(rendered?))
     } else {
         error!("Unknown theme number: {}", theme);
         Err("Unknown theme number".into())
     }
 }
 
-pub async fn render_page(
+/// Render a complete default-theme document when request/account state is not
+/// available (for example, an error created deep inside a transaction helper).
+pub fn render_public_fallback(page_content: &str, page_title: &str) -> Html<String> {
+    show_page_with_theme(page_content, page_title, 1, false, None, false).unwrap_or_else(|_| {
+        Html(
+            ThemeRenderError::page()
+                .render()
+                .expect("the fallback error template must render"),
+        )
+    })
+}
+
+async fn render_page_context(
     page_content: &str,
     page_title: &str,
     cookies: CookieJar,
@@ -151,18 +217,42 @@ pub async fn render_page(
         username,
         management_visible,
     ) {
-        Ok(html) => {
+        Ok(mut html) => {
+            if cookies.get("timezone").is_none() {
+                html.0 = html.0.replace(
+                    "</body>",
+                    "<script>const form=document.createElement('form');form.method='post';form.action='/settings/timezone';const timezone=document.createElement('input');timezone.type='hidden';timezone.name='timezone';timezone.value=Intl.DateTimeFormat().resolvedOptions().timeZone||'UTC';const returnTo=document.createElement('input');returnTo.type='hidden';returnTo.name='return_to';returnTo.value=window.location.pathname+window.location.search;form.append(timezone,returnTo);document.body.append(form);form.submit()</script></body>",
+                );
+            }
             trace!(page_title, "Finished rendering page");
             html
         }
         Err(e) => {
             error!("Failed to render page with theme: {}", e);
             Html(
-                include_str!(concat!(
-                    env!("CARGO_MANIFEST_DIR"),
-                    "/static/errors/theme-render.html"
-                ))
-                .to_string(),
+                ThemeRenderError::page()
+                    .render()
+                    .expect("the fallback error template must render"),
+            )
+        }
+    }
+}
+
+/// Render a typed Askama page inside the currently selected theme document.
+pub async fn render_template_page<T: Template>(
+    page: &T,
+    page_title: &str,
+    cookies: CookieJar,
+    pool: &sqlx::PgPool,
+) -> Html<String> {
+    match page.render() {
+        Ok(content) => render_page_context(&content, page_title, cookies, pool).await,
+        Err(error) => {
+            error!(?error, page_title, "Failed to render Askama page template");
+            Html(
+                ThemeRenderError::page()
+                    .render()
+                    .expect("the fallback error template must render"),
             )
         }
     }
@@ -176,10 +266,6 @@ mod tests {
     fn simple_themes_are_available() {
         assert_eq!(theme_name(1), "white-simple");
         assert_eq!(theme_name(2), "black-simple");
-        let options = theme_options(1);
-        assert!(options.contains("value=\"0\""));
-        assert!(options.contains("value=\"1\" selected"));
-        assert!(options.contains("value=\"2\""));
         let black = show_page_with_theme("Content", "Title", 2, false, None, false)
             .unwrap()
             .0;

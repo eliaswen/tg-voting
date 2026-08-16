@@ -1,14 +1,12 @@
-use axum::{
-    extract::State,
-    http::StatusCode,
-    response::{Html, IntoResponse},
-};
+use askama::Template;
+use axum::{extract::State, http::StatusCode, response::IntoResponse};
 use axum_extra::extract::cookie::CookieJar;
 use tracing::{debug, trace};
 
+use crate::error_handling::{ErrorPage, themed_error_response};
 use crate::pages::auth::{CENSUS_MINISTER, ELECTION_MINISTER, SUPERADMIN, require_citizen};
 use crate::pages::login::AppState;
-use crate::render::render_page;
+use crate::render::render_template_page;
 
 pub async fn get_management(State(state): State<AppState>, jar: CookieJar) -> impl IntoResponse {
     trace!("Handling management page request");
@@ -23,28 +21,30 @@ pub async fn get_management(State(state): State<AppState>, jar: CookieJar) -> im
             citizen_id = citizen.id,
             "Rejected management page without permissions"
         );
-        return (
+        return themed_error_response(
             StatusCode::FORBIDDEN,
-            Html(include_str!(concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/static/errors/forbidden.html"
-            ))),
+            &ErrorPage::permission("403 Forbidden", "forbidden-page"),
+            &state,
+            jar,
         )
-            .into_response();
+        .await;
     }
-    let content = include_str!(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/static/management/management.html"
-    ))
-    .replace(
-        "$${{election_management_hidden}}",
-        if election_visible { "" } else { "hidden" },
+    render_template_page(
+        &ManagementPage {
+            election_visible,
+            census_visible,
+        },
+        "Management",
+        jar,
+        &state.pool,
     )
-    .replace(
-        "$${{census_management_hidden}}",
-        if census_visible { "" } else { "hidden" },
-    );
-    render_page(&content, "Management", jar, &state.pool)
-        .await
-        .into_response()
+    .await
+    .into_response()
+}
+
+#[derive(Template)]
+#[template(path = "management/management.html")]
+struct ManagementPage {
+    election_visible: bool,
+    census_visible: bool,
 }

@@ -1,0 +1,70 @@
+<section id="candidate-management-page" class="page manage-page election-page candidate-management-page">
+<header id="candidate-management-header" class="page-header manage-header election-header candidate-management-header">
+<p id="candidate-management-context" class="page-context election-context"><a id="candidate-management-dashboard-link" class="navigation-link back-link" href="/manage/elections/{{ election_uuid }}">Election dashboard</a></p>
+<h1 id="candidate-management-title" class="page-title manage-title election-title">Season {{ season }} candidates</h1>
+<p id="candidate-management-election" class="status-message election-status">{{ name }} is currently <strong id="candidate-management-status" class="status-value">{{ status }}</strong>.</p>
+<p id="candidate-management-description" class="page-description manage-description">Review registrations and save each ticket or council candidate separately. Status changes made here are recorded with the reason supplied in the form.</p>
+</header>
+
+<section id="candidate-management-help" class="page-section manage-section candidates-section candidate-help-section">
+<h2 id="candidate-management-help-title" class="section-title manage-section-title">Candidate administration</h2>
+<p id="candidate-management-help-description" class="section-description">Presidential candidates are managed as tickets with their current vice president. Council candidates are managed individually. The public candidate list is available from the navigation below.</p>
+</section>
+
+<section id="presidential-tickets-section" class="page-section manage-section candidates-section presidential-tickets-section">
+<header id="presidential-tickets-header" class="section-header candidates-section-header">
+<h2 id="presidential-tickets-title" class="section-title candidates-section-title">Presidential tickets</h2>
+<p id="presidential-tickets-description" class="section-description candidates-section-description">Edit the public names, parties, vice president, messages, and registration status for each ticket.</p>
+</header>
+{% for ticket in presidential %}<article id="managed-presidential-ticket" class="managed-candidate presidential-ticket">
+<h3 id="managed-presidential-ticket-title" class="item-title candidate-name">{{ ticket.president_name }} and {{ ticket.vice_president_name }}</h3>
+<form id="managed-presidential-ticket-form" class="manage-form candidate-form ticket-form" method="post" action="/manage/elections/{{ election_uuid }}/status/tickets/{{ ticket.uuid }}">
+<p id="managed-president-name-field" class="form-field candidate-field"><label id="managed-president-name-label" class="form-label" for="managed-president-name-input">President display name</label> <input id="managed-president-name-input" class="form-control text-input" type="text" name="president_display_name" value="{{ ticket.president_name }}" required></p>
+<p id="managed-president-party-field" class="form-field candidate-field"><label id="managed-president-party-label" class="form-label" for="managed-president-party-input">President party</label> <input id="managed-president-party-input" class="form-control text-input" type="text" name="president_party" value="{{ ticket.president_party }}" required></p>
+<p id="managed-vice-president-field" class="form-field candidate-field"><label id="managed-vice-president-label" class="form-label" for="managed-vice-president-select">Vice president</label> <select id="managed-vice-president-select" class="form-control candidate-select" name="vice_president_citizen_id">{% for option in ticket.vice_president_options %}<option id="form-option" class="select-option" value="{{ option.id }}"{% if option.selected %} selected{% endif %}>{{ option.label }}</option>{% endfor %}</select></p>
+<p id="managed-vice-president-name-field" class="form-field candidate-field"><label id="managed-vice-president-name-label" class="form-label" for="managed-vice-president-name-input">Vice president display name</label> <input id="managed-vice-president-name-input" class="form-control text-input" type="text" name="vice_president_display_name" value="{{ ticket.vice_president_name }}" required></p>
+<p id="managed-vice-president-party-field" class="form-field candidate-field"><label id="managed-vice-president-party-label" class="form-label" for="managed-vice-president-party-input">Vice president party</label> <input id="managed-vice-president-party-input" class="form-control text-input" type="text" name="vice_president_party" value="{{ ticket.vice_president_party }}" required></p>
+<div id="managed-ticket-messages" class="form-fields message-fields">{% for message in ticket.messages %}<p id="ticket-message-field" class="form-field message-field"><label id="ticket-message-label" class="form-label">Message {{ loop.index }} <input id="ticket-message-input" class="form-control text-input message-input" type="text" name="message_{{ loop.index }}" maxlength="100" value="{{ message }}"></label></p>{% endfor %}</div>
+<p id="managed-ticket-status-field" class="form-field status-field"><label id="managed-ticket-status-label" class="form-label" for="managed-ticket-status-select">Registration status</label> <select id="managed-ticket-status-select" class="form-control status-select" name="status">{% for option in registration_statuses %}<option id="form-option" class="select-option" value="{{ option }}"{% if ticket.is_status(option) %} selected{% endif %}>{{ option }}</option>{% endfor %}</select></p>
+<p id="managed-ticket-reason-field" class="form-field reason-field"><label id="managed-ticket-reason-label" class="form-label" for="managed-ticket-reason-input">Reason</label> <input id="managed-ticket-reason-input" class="form-control text-input reason-input" type="text" name="reason" required></p>
+<button id="managed-ticket-submit" class="form-button submit-button" type="submit">Update ticket</button>
+</form>
+</article>{% endfor %}
+<p id="managed-presidential-tickets-empty" class="empty-state candidates-empty-state"{% if !presidential.is_empty() %} hidden{% endif %}>No presidential tickets are registered.</p>
+</section>
+
+<section id="managed-council-section" class="page-section manage-section candidates-section managed-council-section">
+<header id="managed-council-header" class="section-header candidates-section-header">
+<h2 id="managed-council-title" class="section-title candidates-section-title">Standalone candidates</h2>
+<p id="managed-council-description" class="section-description candidates-section-description">Edit each council candidate's public name, party, and registration status.</p>
+</header>
+{% for candidate in council %}<article id="managed-council-candidate" class="managed-candidate council-candidate">
+<h3 id="managed-council-candidate-title" class="item-title candidate-name">{{ candidate.position }}: {{ candidate.name }}</h3>
+<form id="managed-council-candidate-form" class="manage-form candidate-form council-form" method="post" action="/manage/elections/{{ election_uuid }}/status/council/{{ candidate.uuid }}">
+<p id="managed-council-name-field" class="form-field candidate-field"><label id="managed-council-name-label" class="form-label" for="managed-council-name-input">Display name</label> <input id="managed-council-name-input" class="form-control text-input" type="text" name="election_display_name" value="{{ candidate.name }}" required></p>
+<p id="managed-council-party-field" class="form-field candidate-field"><label id="managed-council-party-label" class="form-label" for="managed-council-party-input">Party</label> <input id="managed-council-party-input" class="form-control text-input" type="text" name="party" value="{{ candidate.party }}" required></p>
+<p id="managed-council-status-field" class="form-field status-field"><label id="managed-council-status-label" class="form-label" for="managed-council-status-select">Registration status</label> <select id="managed-council-status-select" class="form-control status-select" name="status">{% for option in registration_statuses %}<option id="form-option" class="select-option" value="{{ option }}"{% if candidate.is_status(option) %} selected{% endif %}>{{ option }}</option>{% endfor %}</select></p>
+<p id="managed-council-reason-field" class="form-field reason-field"><label id="managed-council-reason-label" class="form-label" for="managed-council-reason-input">Reason</label> <input id="managed-council-reason-input" class="form-control text-input reason-input" type="text" name="reason" required></p>
+<button id="managed-council-submit" class="form-button submit-button" type="submit">Update candidate</button>
+</form>
+</article>{% endfor %}
+<p id="managed-council-candidates-empty" class="empty-state candidates-empty-state"{% if !council.is_empty() %} hidden{% endif %}>No council candidates are registered.</p>
+</section>
+
+<section id="former-vice-presidents-section" class="page-section manage-section candidates-section former-vice-presidents-section">
+<header id="former-vice-presidents-header" class="section-header candidates-section-header">
+<h2 id="former-vice-presidents-title" class="section-title candidates-section-title">Former vice presidents</h2>
+<p id="former-vice-presidents-description" class="section-description candidates-section-description">These vice-presidential candidate records are no longer connected to a current presidential ticket and are kept for the election history.</p>
+</header>
+<ul id="former-vice-presidents-list" class="item-list candidates-list former-vice-presidents-list">
+{% for candidate in former_vice_presidents %}<li id="former-vice-president-item" class="item candidate-item former-vice-president-item">
+<span id="former-vice-president-name" class="candidate-name">{{ candidate.name }}</span> (<span id="former-vice-president-party" class="candidate-party">{{ candidate.party }}</span>) - <span id="former-vice-president-status" class="candidate-status status-value">{{ candidate.status }}</span>
+</li>{% endfor %}
+<li id="former-vice-presidents-empty" class="item empty-state candidates-empty-state"{% if !former_vice_presidents.is_empty() %} hidden{% endif %}>No former vice presidents.</li>
+</ul>
+</section>
+
+<nav id="candidate-management-navigation" class="page-navigation manage-navigation candidate-navigation">
+<a id="candidate-management-status-link" class="navigation-link status-link" href="/manage/elections/{{ election_uuid }}/status">Manage election status</a> | <a id="candidate-management-public-link" class="navigation-link public-link" href="/elections/{{ election_uuid }}/candidates">Public candidate list</a> | <a id="candidate-management-back-link" class="navigation-link back-link" href="/manage/elections/{{ election_uuid }}">Back to election dashboard</a>
+</nav>
+</section>

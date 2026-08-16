@@ -1,5 +1,6 @@
 use crate::pages::login::AppState;
-use crate::render::render_page;
+use crate::render::render_template_page;
+use askama::Template;
 use axum::{extract::State, response::IntoResponse};
 use axum_extra::extract::cookie::CookieJar;
 use tracing::trace;
@@ -9,15 +10,11 @@ pub async fn get_list_themes_page(
     jar: CookieJar,
 ) -> impl IntoResponse {
     trace!("Handling themes page request");
-    render_page(
-        include_str!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/static/themes/list-themes.html"
-        )),
-        "Themes",
-        jar,
-        &state.pool,
-    )
-    .await
-    .into_response()
+    render_template_page(&ThemesPage, "Themes", jar, &state.pool)
+        .await
+        .into_response()
 }
+
+#[derive(Template)]
+#[template(path = "themes/list-themes.html")]
+struct ThemesPage;

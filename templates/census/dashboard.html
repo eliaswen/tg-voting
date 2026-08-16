@@ -1,0 +1,54 @@
+<section id="census-dashboard-page" class="page manage-page census-page census-dashboard-page">
+<header id="census-dashboard-header" class="page-header manage-header census-dashboard-header">
+<h1 id="census-dashboard-title" class="page-title manage-title census-dashboard-title">Census management</h1>
+<p id="census-dashboard-description" class="page-description manage-description census-dashboard-description">Manage the census.</p>
+</header>
+
+<section id="active-census-section" class="page-section manage-section census-section active-census-section">
+<header id="active-census-header" class="section-header census-section-header active-census-header">
+<h2 id="active-census-title" class="section-title manage-section-title census-section-title">Census currently in use</h2>
+<p id="active-census-description" class="section-description census-section-description">This is the census used by elections. Opening another month does not activate it.</p>
+</header>
+<article id="active-census-summary" class="item-summary census-summary active-census-summary"{% if !has_active %} hidden{% endif %}>
+<h3 id="active-census-month" class="item-title census-item-title">{{ active_month }}</h3>
+<p id="active-census-status" class="status-message census-status">Currently used</p>
+<p id="active-census-actions" class="item-navigation census-item-navigation"><a id="active-census-open-link" class="navigation-link action-link" href="/manage/census/{{ active_uuid }}">Open citizen records</a></p>
+</article>
+<p id="active-census-empty" class="empty-state census-empty-state"{% if has_active %} hidden{% endif %}>No census is currently in use. Create a census below, open it, and select 'Use this census' now.</p>
+</section>
+
+<section id="census-create-section" class="page-section manage-section census-section census-create-section">
+<header id="census-create-header" class="section-header census-section-header census-create-header">
+<h2 id="census-create-title" class="section-title manage-section-title census-section-title">Create a monthly census</h2>
+<p id="census-create-description" class="section-description census-section-description">Each citizen starts as Not filled out. The new census does not override the active census until you activate it.</p>
+</header>
+<form id="census-create-form" class="manage-form census-form census-create-form" method="post" action="/manage/census">
+<p id="census-create-month-field" class="form-field census-field census-month-field">
+<label id="census-create-month-label" class="form-label census-label census-month-label" for="census-create-month-input">Census month</label>
+<input id="census-create-month-input" class="form-control census-control month-input census-month-input" type="month" name="census_month" value="{{ current_month }}" required>
+</p>
+<p id="census-create-help" class="form-help census-form-help">Only one census can exist for a month.</p>
+<p id="census-create-submit-field" class="form-field census-field census-submit-field"><button id="census-create-submit" class="form-button submit-button census-submit-button" type="submit">Create census</button></p>
+</form>
+</section>
+
+<section id="census-history-section" class="page-section manage-section census-section census-history-section">
+<header id="census-history-header" class="section-header census-section-header census-history-header">
+<h2 id="census-history-title" class="section-title manage-section-title census-section-title">Monthly records</h2>
+<p id="census-history-description" class="section-description census-section-description">Edit existing censuses.</p>
+</header>
+<ul id="census-history-list" class="item-list manage-list census-list census-history-list">
+{% for census in censuses %}<li id="census-item-{{ census.uuid }}" class="item manage-item census-item census-item-{% if census.active %}active{% else %}inactive{% endif %}">
+<article id="census-summary-{{ census.uuid }}" class="item-summary census-summary">
+<h3 id="census-month-{{ census.uuid }}" class="item-title census-item-title"><a id="census-link-{{ census.uuid }}" class="navigation-link census-link" href="/manage/census/{{ census.uuid }}">{{ census.month }}</a></h3>
+<p id="census-status-{{ census.uuid }}" class="item-detail census-item-status census-status-{% if census.active %}active{% else %}inactive{% endif %}">{% if census.active %}Currently used{% else %}Stored{% endif %}</p>
+</article>
+</li>{% endfor %}
+<li id="census-history-empty" class="item empty-state census-empty-state"{% if !censuses.is_empty() %} hidden{% endif %}>No monthly census has been created yet.</li>
+</ul>
+</section>
+
+<nav id="census-dashboard-navigation" class="page-navigation manage-navigation census-management-navigation">
+<a id="census-dashboard-back-link" class="navigation-link back-link" href="/manage">Back to management</a>
+</nav>
+</section>

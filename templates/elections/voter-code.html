@@ -1,0 +1,22 @@
+<section id="voter-code-page" class="page elections-page voter-code-page">
+<h1 id="voter-code-title" class="page-title">{{ election_name }} voter code</h1>
+{% if code.is_empty() %}
+    {% if issued %}
+        <p class="status-message">A voter code has already been issued. It cannot be shown again. It cannot be reset.</p>
+    {% else %}
+        <p>Enter the six-number citizen ID associated with your logged-in account. Your voter code will be shown once.</p>
+        <h3>ATTENTION: Your voter code is only shown <strong>once</strong>. It <strong>cannot be retrieved or reset</strong> if you lose it. Please save it immediately!</h3>
+        <form method="post" action="/elections/{{ election_uuid }}/voter-code">
+            <label for="citizen-id-input">Citizen ID</label>
+            <input id="citizen-id-input" name="citizen_id" inputmode="numeric" pattern="[0-9]{6}" required>
+            <button type="submit">Obtain voter code</button>
+            {% if debug_mode %}<button type="submit" name="debug_census" value="true">Debug obtain without census</button>{% endif %}
+        </form>
+    {% endif %}
+{% else %}
+    <p>Your voter code is <strong>{{ code }}</strong>.</p>
+    <p>Save it now. It cannot be retrieved again.</p>
+{% endif %}
+<h3>ATTENTION: Your voter code is <strong>private information</strong>. Sharing it will allow someone else to vote on your behalf!</h3>
+<nav><a href="/elections/{{ election_uuid }}">Back to election</a></nav>
+</section>

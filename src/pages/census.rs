@@ -1,8 +1,9 @@
+use askama::Template;
 use axum::{
     Form,
     extract::{Path, Query, State},
     http::StatusCode,
-    response::{Html, IntoResponse, Redirect, Response},
+    response::{IntoResponse, Redirect, Response},
 };
 use axum_extra::extract::cookie::CookieJar;
 use chrono::{Datelike, NaiveDate};
@@ -10,9 +11,10 @@ use serde::Deserialize;
 use sqlx::Row;
 use tracing::{debug, error, info, trace, warn};
 
-use crate::pages::auth::{html_escape, require_census_manager};
+use crate::error_handling::{ErrorPage, error_response};
+use crate::pages::auth::require_census_manager;
 use crate::pages::login::AppState;
-use crate::render::render_page;
+use crate::render::render_template_page;
 
 #[derive(Deserialize)]
 pub struct CreateCensusForm {
@@ -91,74 +93,51 @@ async fn render_census(
             ?selected_uuid,
             "Requested census was not found"
         );
-        return (
+        return error_response(
             StatusCode::NOT_FOUND,
-            Html(include_str!(concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/static/errors/not-found.html"
-            ))),
-        )
-            .into_response();
+            &ErrorPage::new("404 Not Found", "", "not-found-page").with_message_kind(2),
+        );
     }
 
-    let mut census_items = String::new();
+    let mut census_items = Vec::new();
     for census in &censuses {
         let census_uuid: uuid::Uuid = census.get("uuid");
         let month: NaiveDate = census.get("census_month");
         let active: bool = census.get("active");
-        census_items.push_str(
-            &include_str!(concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/static/census/census-item.html"
-            ))
-            .replace("$${{census_uuid}}", &census_uuid.to_string())
-            .replace("$${{census_month}}", &month.format("%B %Y").to_string())
-            .replace(
-                "$${{active_text}}",
-                if active { "Currently used" } else { "Stored" },
-            )
-            .replace(
-                "$${{active_class}}",
-                if active { "active" } else { "inactive" },
-            ),
-        );
+        census_items.push(CensusItem {
+            uuid: census_uuid,
+            month: month.format("%B %Y").to_string(),
+            active,
+        });
     }
 
     if selected_uuid.is_none() {
         let active = censuses
             .iter()
             .find(|census| census.get::<bool, _>("active"));
-        let (active_uuid, active_month, active_hidden, no_active_hidden) = match active {
+        let (active_uuid, active_month, has_active) = match active {
             Some(census) => {
                 let census_uuid: uuid::Uuid = census.get("uuid");
                 let month: NaiveDate = census.get("census_month");
                 (
                     census_uuid.to_string(),
                     month.format("%B %Y").to_string(),
-                    "",
-                    "hidden",
+                    true,
                 )
             }
-            None => (String::new(), String::new(), "hidden", ""),
+            None => (String::new(), String::new(), false),
         };
         let current_month = chrono::Utc::now().date_naive();
         let current_month = format!("{:04}-{:02}", current_month.year(), current_month.month());
-        let content = include_str!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/static/census/dashboard.html"
-        ))
-        .replace("$${{current_month}}", &current_month)
-        .replace("$${{census_items}}", &census_items)
-        .replace(
-            "$${{censuses_empty_hidden}}",
-            if censuses.is_empty() { "" } else { "hidden" },
-        )
-        .replace("$${{active_census_uuid}}", &active_uuid)
-        .replace("$${{active_month}}", &active_month)
-        .replace("$${{active_census_hidden}}", active_hidden)
-        .replace("$${{no_active_census_hidden}}", no_active_hidden);
+        let page = CensusDashboardPage {
+            current_month: &current_month,
+            censuses: &census_items,
+            active_uuid: &active_uuid,
+            active_month: &active_month,
+            has_active,
+        };
         debug!(citizen_id = manager.id, "Rendering census dashboard");
-        return render_page(&content, "Manage census", jar, &state.pool)
+        return render_template_page(&page, "Manage census", jar, &state.pool)
             .await
             .into_response();
     }
@@ -204,7 +183,7 @@ async fn render_census(
                     return census_server_error();
                 }
             };
-            let mut rows = String::new();
+            let mut rows = Vec::new();
             for citizen in citizens {
                 let citizen_uuid: uuid::Uuid = citizen.get("uuid");
                 let status: String = citizen.get("census_status");
@@ -212,32 +191,15 @@ async fn render_census(
                     .try_get::<Option<String>, _>("citizen_id")
                     .unwrap_or_default()
                     .unwrap_or_default();
-                rows.push_str(
-                    &include_str!(concat!(
-                        env!("CARGO_MANIFEST_DIR"),
-                        "/static/census/citizen-row.html"
-                    ))
-                    .replace("$${{census_uuid}}", &census_uuid.to_string())
-                    .replace("$${{citizen_uuid}}", &citizen_uuid.to_string())
-                    .replace("$${{citizen_id}}", &html_escape(&citizen_identifier))
-                    .replace(
-                        "$${{oauth_username}}",
-                        &display_value(citizen.get("oauth_username")),
-                    )
-                    .replace(
-                        "$${{display_name}}",
-                        &display_value(citizen.get("display_name")),
-                    )
-                    .replace(
-                        "$${{discord_username}}",
-                        &display_value(citizen.get("discord_username")),
-                    )
-                    .replace(
-                        "$${{reddit_username}}",
-                        &display_value(citizen.get("reddit_username")),
-                    )
-                    .replace("$${{status_options}}", &status_options(&status)),
-                );
+                rows.push(CensusCitizen {
+                    uuid: citizen_uuid,
+                    citizen_id: citizen_identifier,
+                    oauth_username: display_value_raw(citizen.get("oauth_username")),
+                    display_name: display_value_raw(citizen.get("display_name")),
+                    discord_username: display_value_raw(citizen.get("discord_username")),
+                    reddit_username: display_value_raw(citizen.get("reddit_username")),
+                    status,
+                });
             }
             let month: NaiveDate = census.get("census_month");
             (
@@ -247,44 +209,28 @@ async fn render_census(
                 rows,
             )
         } else {
-            (String::new(), String::new(), false, String::new())
+            (String::new(), String::new(), false, Vec::new())
         };
 
-    let content = include_str!(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/static/census/month.html"
-    ))
-    .replace("$${{search_query}}", &html_escape(search.trim()))
-    .replace("$${{selected_census_uuid}}", &selected_census_uuid)
-    .replace("$${{selected_month}}", &selected_month)
-    .replace(
-        "$${{selected_status}}",
-        if selected_active {
+    let page = CensusMonthPage {
+        search_query: search.trim(),
+        census_uuid: &selected_census_uuid,
+        selected_month: &selected_month,
+        selected_status: if selected_active {
             "Currently used"
         } else {
             "Not currently used"
         },
-    )
-    .replace(
-        "$${{activate_hidden}}",
-        if selected_active { "hidden" } else { "" },
-    )
-    .replace("$${{citizen_rows}}", &citizen_rows)
-    .replace(
-        "$${{citizens_empty_hidden}}",
-        if citizen_rows.is_empty() {
-            ""
-        } else {
-            "hidden"
-        },
-    );
+        active: selected_active,
+        citizens: &citizen_rows,
+    };
     debug!(
         citizen_id = manager.id,
         census_uuid = %selected_census_uuid,
         "Rendering monthly census page"
     );
-    render_page(
-        &content,
+    render_template_page(
+        &page,
         &format!("{} census", selected_month),
         jar,
         &state.pool,
@@ -483,31 +429,49 @@ pub async fn post_update_census_citizen(
     Redirect::to(&format!("/manage/census/{census_uuid}")).into_response()
 }
 
-fn display_value(value: String) -> String {
+fn display_value_raw(value: String) -> String {
     if value.trim().is_empty() {
         "Not available".to_string()
     } else {
-        html_escape(&value)
+        value
     }
 }
 
-fn status_options(current: &str) -> String {
-    [
-        ("filled_out", "Filled out"),
-        ("ineligible", "Ineligible"),
-        ("incorrect", "Incorrect"),
-        ("not_filled_out", "Not filled out"),
-        ("other", "Other"),
-        ("to_be_set", "To be set"),
-    ]
-    .into_iter()
-    .map(|(value, label)| {
-        format!(
-            "<option value=\"{value}\"{}>{label}</option>",
-            if value == current { " selected" } else { "" }
-        )
-    })
-    .collect()
+struct CensusItem {
+    uuid: uuid::Uuid,
+    month: String,
+    active: bool,
+}
+
+#[derive(Template)]
+#[template(path = "census/dashboard.html")]
+struct CensusDashboardPage<'a> {
+    current_month: &'a str,
+    censuses: &'a [CensusItem],
+    active_uuid: &'a str,
+    active_month: &'a str,
+    has_active: bool,
+}
+
+struct CensusCitizen {
+    uuid: uuid::Uuid,
+    citizen_id: String,
+    oauth_username: String,
+    display_name: String,
+    discord_username: String,
+    reddit_username: String,
+    status: String,
+}
+
+#[derive(Template)]
+#[template(path = "census/month.html")]
+struct CensusMonthPage<'a> {
+    search_query: &'a str,
+    census_uuid: &'a str,
+    selected_month: &'a str,
+    selected_status: &'a str,
+    active: bool,
+    citizens: &'a [CensusCitizen],
 }
 
 fn valid_status(status: &str) -> bool {
@@ -519,36 +483,26 @@ fn valid_status(status: &str) -> bool {
 
 fn census_bad_request(message: &str) -> Response {
     warn!(%message, "Rejected census request");
-    (
+    error_response(
         StatusCode::BAD_REQUEST,
-        Html(format!(
-            "<section id=\"census-invalid\" class=\"page census-page census-error-page\"><h1 id=\"census-invalid-title\" class=\"page-title error-title\">Invalid census request</h1><p id=\"census-invalid-message\" class=\"error-message\">{}</p><p id=\"census-invalid-navigation\" class=\"page-navigation\"><a id=\"census-invalid-back-link\" class=\"navigation-link back-link\" href=\"/manage/census\">Return to census management</a>.</p></section>",
-            html_escape(message)
-        )),
+        &ErrorPage::new("Invalid census request", message, "census-error-page")
+            .with_back("/manage/census", "Return to census management")
+            .with_back_period(),
     )
-        .into_response()
 }
 
 fn census_not_found() -> Response {
-    (
+    error_response(
         StatusCode::NOT_FOUND,
-        Html(include_str!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/static/errors/not-found.html"
-        ))),
+        &ErrorPage::new("404 Not Found", "", "not-found-page").with_message_kind(2),
     )
-        .into_response()
 }
 
 fn census_server_error() -> Response {
-    (
+    error_response(
         StatusCode::INTERNAL_SERVER_ERROR,
-        Html(include_str!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/static/account/account-error.html"
-        ))),
+        &ErrorPage::new("Account Page", "There was an error while trying to retrieve your account information. This error should not be your fault.", "account-error-page").with_message_kind(5),
     )
-        .into_response()
 }
 
 #[cfg(test)]
@@ -563,11 +517,5 @@ mod tests {
         assert!(valid_status("not_filled_out"));
         assert!(valid_status("other"));
         assert!(!valid_status("complete"));
-    }
-
-    #[test]
-    fn census_status_options_select_current_value() {
-        let options = status_options("incorrect");
-        assert!(options.contains("value=\"incorrect\" selected"));
     }
 }

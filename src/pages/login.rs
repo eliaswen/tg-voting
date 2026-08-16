@@ -1,4 +1,5 @@
-use crate::render::render_page;
+use crate::render::render_template_page;
+use askama::Template;
 use axum::{
     BoxError,
     extract::{FromRef, Path, Query, State},
@@ -22,6 +23,7 @@ use crate::backend::login_oauth::{
     SESSION_LIFETIME_DAYS, handle_oauth_callback, hash_token as backend_hash_token,
     poll_device_login, request_device_authorization,
 };
+use crate::error_handling::{ErrorPage, themed_error_response};
 use axum_extra::extract::cookie::CookieJar;
 
 #[derive(Clone, Debug)]
@@ -86,6 +88,38 @@ pub struct AppState {
     pub discord_client_secret: Option<String>,
 }
 
+#[derive(Template)]
+#[template(path = "login/login.html")]
+struct LoginPage;
+
+#[derive(Template)]
+#[template(path = "login/oauth-device.html")]
+struct DeviceLoginPage<'a> {
+    verification_uri: &'a str,
+    user_code: &'a str,
+    verification_uri_complete: &'a str,
+    has_verification_uri_complete: bool,
+    request_id: uuid::Uuid,
+}
+
+#[derive(Template)]
+#[template(path = "login/oauth-callback.html")]
+struct OauthCallbackPage {
+    request_id: uuid::Uuid,
+}
+
+#[derive(Template)]
+#[template(path = "login/manual-check.html")]
+struct ManualCheckPage {
+    request_id: uuid::Uuid,
+}
+
+#[derive(Template)]
+#[template(path = "login/userinfo.html")]
+struct UserInfoPage<'a> {
+    identity: &'a str,
+}
+
 pub async fn get_login(State(state): State<AppState>, jar: CookieJar) -> impl IntoResponse {
     trace!(
         session_present = jar.get("session").is_some(),
@@ -96,17 +130,9 @@ pub async fn get_login(State(state): State<AppState>, jar: CookieJar) -> impl In
         Some(token) => token,
         None => {
             debug!("Rendering login page for anonymous request");
-            return render_page(
-                include_str!(concat!(
-                    env!("CARGO_MANIFEST_DIR"),
-                    "/static/login/login.html"
-                )),
-                "Login",
-                jar,
-                &state.pool,
-            )
-            .await
-            .into_response();
+            return render_template_page(&LoginPage, "Login", jar, &state.pool)
+                .await
+                .into_response();
         }
     };
 
@@ -136,17 +162,9 @@ pub async fn get_login(State(state): State<AppState>, jar: CookieJar) -> impl In
         }
     }
 
-    return render_page(
-        include_str!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/static/login/login.html"
-        )),
-        "Login",
-        jar,
-        &state.pool,
-    )
-    .await
-    .into_response();
+    return render_template_page(&LoginPage, "Login", jar, &state.pool)
+        .await
+        .into_response();
 }
 
 pub async fn get_login_oauth(State(state): State<AppState>, headers: HeaderMap) -> Redirect {
@@ -188,21 +206,18 @@ pub async fn get_login_oauth_device(
         Ok(authorization) => authorization,
         Err(error) => {
             error!(?error, "Failed to start OAuth device login");
-            let page = render_page(
-                &include_str!(concat!(
-                    env!("CARGO_MANIFEST_DIR"),
-                    "/static/login/device-unavailable.html"
-                ))
-                .replace(
-                    "$${{message}}",
+            return themed_error_response(
+                StatusCode::SERVICE_UNAVAILABLE,
+                &ErrorPage::new(
+                    "Device login unavailable",
                     "The identity provider is not configured for device login yet.",
-                ),
-                "Device login unavailable",
+                    "device-login-unavailable-page",
+                )
+                .with_back("/login", "Use the regular login"),
+                &state,
                 jar,
-                &state.pool,
             )
             .await;
-            return (StatusCode::SERVICE_UNAVAILABLE, page).into_response();
         }
     };
     if !valid_verification_uri(&authorization.verification_uri)
@@ -212,21 +227,18 @@ pub async fn get_login_oauth_device(
             .is_some_and(|uri| !valid_verification_uri(uri))
     {
         error!("OAuth provider returned an invalid device verification URI");
-        let page = render_page(
-            &include_str!(concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/static/login/device-unavailable.html"
-            ))
-            .replace(
-                "$${{message}}",
+        return themed_error_response(
+            StatusCode::BAD_GATEWAY,
+            &ErrorPage::new(
+                "Device login unavailable",
                 "The identity provider returned an invalid verification address.",
-            ),
-            "Device login unavailable",
+                "device-login-unavailable-page",
+            )
+            .with_back("/login", "Use the regular login"),
+            &state,
             jar,
-            &state.pool,
         )
         .await;
-        return (StatusCode::BAD_GATEWAY, page).into_response();
     }
 
     let request_id = uuid::Uuid::now_v7();
@@ -252,31 +264,14 @@ pub async fn get_login_oauth_device(
     ));
 
     let verification_uri_complete = authorization.verification_uri_complete.unwrap_or_default();
-    let verification_uri_complete_hidden = if verification_uri_complete.is_empty() {
-        "hidden"
-    } else {
-        ""
+    let template = DeviceLoginPage {
+        verification_uri: &authorization.verification_uri,
+        user_code: &authorization.user_code,
+        verification_uri_complete: &verification_uri_complete,
+        has_verification_uri_complete: !verification_uri_complete.is_empty(),
+        request_id,
     };
-    let content = include_str!(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/static/login/oauth-device.html"
-    ))
-    .replace(
-        "$${{verification_uri}}",
-        &html_escape(&authorization.verification_uri),
-    )
-    .replace("$${{user_code}}", &html_escape(&authorization.user_code))
-    .replace(
-        "$${{verification_uri_complete}}",
-        &html_escape(&verification_uri_complete),
-    )
-    .replace(
-        "$${{verification_uri_complete_hidden}}",
-        verification_uri_complete_hidden,
-    )
-    .replace("$${{request_id}}", &request_id.to_string());
-
-    let page = render_page(&content, "Login with another device", jar, &state.pool).await;
+    let page = render_template_page(&template, "Login with another device", jar, &state.pool).await;
     trace!(%request_id, "Rendered OAuth device login page");
     (
         [(header::CACHE_CONTROL, HeaderValue::from_static("no-store"))],
@@ -293,8 +288,8 @@ pub async fn get_login_oauth_callback(
     trace!(request_id = ?params.state, provider_error = params.error.is_some(), authorization_code_present = params.code.is_some(), "Handling OAuth callback");
     let Some(request_id) = params.state else {
         warn!("OAuth callback did not contain state");
-        return render_page(
-            &login_error_content("session-error"),
+        return render_template_page(
+            &login_error_page("session-error"),
             "Login error",
             jar,
             &state.pool,
@@ -308,7 +303,8 @@ pub async fn get_login_oauth_callback(
             "session-error"
         };
         warn!(%request_id, provider_error = params.error.is_some(), "OAuth callback did not contain an authorization code");
-        return render_page(&login_error_content(error), "Login error", jar, &state.pool).await;
+        return render_template_page(&login_error_page(error), "Login error", jar, &state.pool)
+            .await;
     };
     if !state
         .pending_logins
@@ -317,8 +313,8 @@ pub async fn get_login_oauth_callback(
         .contains_key(&request_id)
     {
         warn!(%request_id, "OAuth callback referenced an unknown pending login");
-        return render_page(
-            &login_error_content("session-error"),
+        return render_template_page(
+            &login_error_page("session-error"),
             "Login error",
             jar,
             &state.pool,
@@ -329,13 +325,8 @@ pub async fn get_login_oauth_callback(
     trace!(%request_id, "Spawning OAuth callback completion task");
     tokio::spawn(handle_oauth_callback(state.clone(), request_id, code));
 
-    render_page(
-        &include_str!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/static/login/oauth-callback.html"
-        ))
-        .replace("$${{request_id}}", request_id.to_string().as_str())
-        .to_string(),
+    render_template_page(
+        &OauthCallbackPage { request_id },
         "Signing in",
         jar,
         &state.pool,
@@ -396,12 +387,8 @@ pub async fn get_login_oauth_manual_check(
     match status {
         Some(PendingLoginStatus::Pending) => {
             trace!(%request_id, "Manual OAuth status check is still pending");
-            render_page(
-                &include_str!(concat!(
-                    env!("CARGO_MANIFEST_DIR"),
-                    "/static/login/manual-check.html"
-                ))
-                .replace("$${{request_id}}", &request_id.to_string()),
+            render_template_page(
+                &ManualCheckPage { request_id },
                 "Signing in",
                 jar,
                 &state.pool,
@@ -415,19 +402,14 @@ pub async fn get_login_oauth_manual_check(
         }
         Some(PendingLoginStatus::Failed(error)) => {
             warn!(%request_id, error_code = %error, "Manual OAuth status check observed failed login");
-            render_page(
-                &login_error_content(&error),
-                "Login error",
-                jar,
-                &state.pool,
-            )
-            .await
-            .into_response()
+            render_template_page(&login_error_page(&error), "Login error", jar, &state.pool)
+                .await
+                .into_response()
         }
         None => {
             warn!(%request_id, "Manual OAuth status check referenced unknown login");
-            render_page(
-                &login_error_content("session-error"),
+            render_template_page(
+                &login_error_page("session-error"),
                 "Login error",
                 jar,
                 &state.pool,
@@ -488,19 +470,14 @@ pub async fn get_login_oauth_complete(
         }
         Some(PendingLoginStatus::Failed(error)) => {
             warn!(%request_id, error_code = %error, "OAuth login completion received failed state");
-            render_page(
-                &login_error_content(&error),
-                "Login error",
-                jar,
-                &state.pool,
-            )
-            .await
-            .into_response()
+            render_template_page(&login_error_page(&error), "Login error", jar, &state.pool)
+                .await
+                .into_response()
         }
         _ => {
             warn!(%request_id, "OAuth login completion did not find a completed login");
-            render_page(
-                &login_error_content("session-error"),
+            render_template_page(
+                &login_error_page("session-error"),
                 "Login error",
                 jar,
                 &state.pool,
@@ -581,12 +558,10 @@ pub async fn get_userinfo(State(state): State<AppState>, jar: CookieJar) -> impl
             let email: Option<String> = citizen.get("email");
             let display_name: Option<String> = citizen.get("display_name");
             let identity = display_name.or(username).or(email).unwrap_or_default();
-            render_page(
-                &include_str!(concat!(
-                    env!("CARGO_MANIFEST_DIR"),
-                    "/static/login/userinfo.html"
-                ))
-                .replace("$${{identity}}", &html_escape(&identity)),
+            render_template_page(
+                &UserInfoPage {
+                    identity: &identity,
+                },
                 "User info",
                 jar,
                 &state.pool,
@@ -600,22 +575,18 @@ pub async fn get_userinfo(State(state): State<AppState>, jar: CookieJar) -> impl
         }
         Err(error) => {
             error!(?error, "Failed to retrieve user info");
-            let page = render_page(
-                include_str!(concat!(
-                    env!("CARGO_MANIFEST_DIR"),
-                    "/static/login/userinfo-error.html"
-                )),
-                "User info",
+            themed_error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                &ErrorPage::new("Could not retrieve user info", "", "userinfo-error-page"),
+                &state,
                 jar,
-                &state.pool,
             )
-            .await;
-            (StatusCode::INTERNAL_SERVER_ERROR, page).into_response()
+            .await
         }
     }
 }
 
-fn login_error_content(error: &str) -> String {
+fn login_error_page(error: &str) -> ErrorPage<'static> {
     trace!(error_code = error, "Rendering login error content");
     let message = match error {
         "oauth-failure" => "The identity provider has rejected your login.",
@@ -625,11 +596,7 @@ fn login_error_content(error: &str) -> String {
         _ => "An unexpected error occurred.",
     };
 
-    include_str!(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/static/login/login-error.html"
-    ))
-    .replace("$${{message}}", message)
+    ErrorPage::new("Login error", message, "login-error-page").with_message_kind(7)
 }
 
 fn valid_verification_uri(uri: &str) -> bool {
@@ -696,15 +663,6 @@ fn session_device(headers: &HeaderMap) -> SessionDevice {
     };
     debug!(device_type = %device.device_type, device_name = %device.device_name, "Identified session device");
     device
-}
-
-fn html_escape(value: &str) -> String {
-    value
-        .replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-        .replace('"', "&quot;")
-        .replace('\'', "&#39;")
 }
 
 #[cfg(test)]

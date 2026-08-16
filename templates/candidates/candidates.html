@@ -1,0 +1,25 @@
+<section id="candidates-page" class="page candidates-page election-candidates-page">
+    <h1 id="candidates-title" class="page-title candidates-title">{{ election_name }} candidates</h1>
+    <form id="candidates-search-form" class="search-form candidates-search-form" method="get" action="/elections/{{ election_uuid }}/candidates">
+<label id="candidates-search-label" class="form-label search-label" for="candidates-search-input">Search candidates</label>
+<input id="candidates-search-input" class="form-control search-input" type="search" name="q" value="{{ search_query }}" placeholder="Candidate or party">
+<button id="candidates-search-submit" class="form-button search-button" type="submit">Search</button>
+<a id="candidates-search-clear" class="navigation-link clear-search-link" href="/elections/{{ election_uuid }}/candidates">Clear</a>
+</form>
+    <section id="presidential-candidates-section" class="page-section candidates-section presidential-candidates-section">
+<h2 id="presidential-candidates-title" class="section-title candidates-section-title">President</h2>
+<ul id="presidential-candidates-list" class="item-list candidates-list presidential-candidates-list">{% for ticket in presidential %}<li id="presidential-ticket-item" class="item candidate-item presidential-ticket-item">
+<span id="president-name" class="candidate-name president-name">{{ ticket.president_name }}</span> (<span id="president-party" class="candidate-party president-party">{{ ticket.president_party }}</span>) with <span id="vice-president-name" class="candidate-name vice-president-name">{{ ticket.vice_president_name }}</span> (<span id="vice-president-party" class="candidate-party vice-president-party">{{ ticket.vice_president_party }}</span>)<ul id="presidential-ticket-messages" class="item-list message-list ticket-message-list"{% if ticket.messages.is_empty() %} hidden{% endif %}>{% for message in ticket.messages %}<li id="ticket-message-item" class="item message-item ticket-message-item">{{ message }}</li>{% endfor %}</ul>
+</li>{% endfor %}<li id="presidential-candidates-empty" class="item empty-state candidates-empty-state"{% if !presidential.is_empty() %} hidden{% endif %}>No presidential tickets are currently registered.</li>
+</ul>
+</section>
+    <section id="council-candidates-section" class="page-section candidates-section council-candidates-section">
+<h2 id="council-candidates-title" class="section-title candidates-section-title">Council</h2>
+<ul id="council-candidates-list" class="item-list candidates-list council-candidates-list">{% for candidate in council %}<li id="council-candidate-item" class="item candidate-item council-candidate-item">
+<strong>{{ candidate.position }}</strong>: <span id="council-candidate-name" class="candidate-name council-candidate-name">{{ candidate.name }}</span> (<span id="council-candidate-party" class="candidate-party council-candidate-party">{{ candidate.party }}</span>)</li>{% endfor %}<li id="council-candidates-empty" class="item empty-state candidates-empty-state"{% if !council.is_empty() %} hidden{% endif %}>No council candidates are registered.</li>
+</ul>
+</section>
+    <nav id="candidates-navigation" class="page-navigation candidates-navigation">
+<a id="candidates-overview-link" class="navigation-link election-link" href="/elections/{{ election_uuid }}">Election overview</a> | <a id="candidates-registration-link" class="navigation-link registration-link" href="/elections/{{ election_uuid }}/register">Register or manage my candidacy</a> | <a id="candidates-changes-link" class="navigation-link changes-link" href="/elections/{{ election_uuid }}/changes">Election change log</a> | <a id="candidates-elections-link" class="navigation-link elections-link" href="/elections">All elections</a>
+</nav>
+</section>

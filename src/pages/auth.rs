@@ -1,12 +1,13 @@
 use axum::{
     http::StatusCode,
-    response::{Html, IntoResponse, Redirect, Response},
+    response::{IntoResponse, Redirect, Response},
 };
 use axum_extra::extract::cookie::CookieJar;
 use sqlx::Row;
 use tracing::{debug, error, trace, warn};
 
 use crate::backend::login_oauth::hash_token;
+use crate::error_handling::{ErrorPage, themed_error_response};
 use crate::pages::login::AppState;
 
 pub const ELECTION_MINISTER: i64 = 1 << 3;
@@ -74,14 +75,13 @@ pub async fn current_citizen(
         }
         Err(error) => {
             error!(?error, "Failed to retrieve authenticated citizen");
-            Err((
+            Err(themed_error_response(
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Html(include_str!(concat!(
-                    env!("CARGO_MANIFEST_DIR"),
-                    "/static/errors/authorization.html"
-                ))),
+                &ErrorPage::permission("401 - Unauthorized", "authorization-error-page"),
+                state,
+                jar.clone(),
             )
-                .into_response())
+            .await)
         }
     }
 }
@@ -98,14 +98,13 @@ pub async fn require_citizen(
         }
         Some(citizen) => {
             warn!(citizen_id = citizen.id, "Rejected banned citizen");
-            Err((
+            Err(themed_error_response(
                 StatusCode::FORBIDDEN,
-                Html(include_str!(concat!(
-                    env!("CARGO_MANIFEST_DIR"),
-                    "/static/errors/forbidden.html"
-                ))),
+                &ErrorPage::permission("403 Forbidden", "forbidden-page"),
+                state,
+                jar.clone(),
             )
-                .into_response())
+            .await)
         }
         None => {
             debug!("Redirecting unauthenticated request to login");
@@ -126,14 +125,13 @@ pub async fn require_election_manager(
             role = citizen.role,
             "Rejected citizen without election management permission"
         );
-        return Err((
+        return Err(themed_error_response(
             StatusCode::FORBIDDEN,
-            Html(include_str!(concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/static/errors/forbidden.html"
-            ))),
+            &ErrorPage::permission("403 Forbidden", "forbidden-page"),
+            state,
+            jar.clone(),
         )
-            .into_response());
+        .await);
     }
     debug!(
         citizen_id = citizen.id,
@@ -155,14 +153,13 @@ pub async fn require_census_manager(
             role = citizen.role,
             "Rejected citizen without census management permission"
         );
-        return Err((
+        return Err(themed_error_response(
             StatusCode::FORBIDDEN,
-            Html(include_str!(concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/static/errors/forbidden.html"
-            ))),
+            &ErrorPage::permission("403 Forbidden", "forbidden-page"),
+            state,
+            jar.clone(),
         )
-            .into_response());
+        .await);
     }
     debug!(
         citizen_id = citizen.id,
@@ -170,13 +167,4 @@ pub async fn require_census_manager(
         "Census manager authorization succeeded"
     );
     Ok(citizen)
-}
-
-pub fn html_escape(value: &str) -> String {
-    value
-        .replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-        .replace('"', "&quot;")
-        .replace('\'', "&#39;")
 }

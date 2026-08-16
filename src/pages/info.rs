@@ -1,18 +1,17 @@
+use askama::Template;
 use axum::{extract::State, response::IntoResponse};
 use axum_extra::extract::cookie::CookieJar;
 
 use crate::pages::login::AppState;
-use crate::render::render_page;
+use crate::render::render_template_page;
 use tracing::trace;
 
 pub async fn get_about(State(state): State<AppState>, jar: CookieJar) -> impl IntoResponse {
     trace!("Handling about page request");
-    render_page(
-        &include_str!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/static/info/about.html"
-        ))
-        .replace("$${{version}}", env!("CARGO_PKG_VERSION")),
+    render_template_page(
+        &AboutPage {
+            version: env!("CARGO_PKG_VERSION"),
+        },
         "About",
         jar,
         &state.pool,
@@ -23,17 +22,9 @@ pub async fn get_about(State(state): State<AppState>, jar: CookieJar) -> impl In
 
 pub async fn get_contact(State(state): State<AppState>, jar: CookieJar) -> impl IntoResponse {
     trace!("Handling contact page request");
-    render_page(
-        &include_str!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/static/info/contact.html"
-        )),
-        "Contact",
-        jar,
-        &state.pool,
-    )
-    .await
-    .into_response()
+    render_template_page(&ContactPage, "Contact", jar, &state.pool)
+        .await
+        .into_response()
 }
 
 pub async fn get_staging(State(state): State<AppState>, jar: CookieJar) -> impl IntoResponse {
@@ -43,20 +34,26 @@ pub async fn get_staging(State(state): State<AppState>, jar: CookieJar) -> impl 
             app_mode = state.app_mode,
             "Staging page requested outside staging mode, returning 404"
         );
-        return crate::error_handling::error_not_found()
+        return crate::error_handling::error_not_found(State(state), jar)
             .await
             .into_response();
     }
     trace!("Staging page requested in staging mode, returning staging information page");
-    render_page(
-        &include_str!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/static/info/staging.html"
-        )),
-        "Staging",
-        jar,
-        &state.pool,
-    )
-    .await
-    .into_response()
+    render_template_page(&StagingPage, "Staging", jar, &state.pool)
+        .await
+        .into_response()
 }
+
+#[derive(Template)]
+#[template(path = "info/about.html")]
+struct AboutPage<'a> {
+    version: &'a str,
+}
+
+#[derive(Template)]
+#[template(path = "info/contact.html")]
+struct ContactPage;
+
+#[derive(Template)]
+#[template(path = "info/staging.html")]
+struct StagingPage;

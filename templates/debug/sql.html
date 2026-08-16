@@ -1,0 +1,11 @@
+<section id="debug-sql-page" class="page debug-page sql-debug-page">
+<form id="debug-sql-form" class="debug-form sql-form" method="post" action="/debug/sql">
+<label id="debug-sql-label" class="form-label" for="debug-sql-input">SQL query</label> <input id="debug-sql-input" class="form-control text-input sql-input" type="text" name="query">
+<button id="debug-sql-submit" class="form-button submit-button" type="submit">Submit</button>
+</form>{% if has_result %}{% if error.is_empty() %}<section id="debug-sql-result" class="page-section debug-result-section">
+<h1 id="debug-sql-result-title" class="section-title debug-title">Result</h1>
+<ul id="debug-sql-result-list" class="item-list debug-list">{% for row in rows %}<li id="debug-list-item" class="item debug-item">{{ row }}</li>{% endfor %}</ul>
+</section>{% else %}<section id="debug-sql-error" class="page-section error-page debug-error-section">
+<h1 id="debug-sql-error-title" class="section-title error-title">Error</h1>
+<p id="debug-sql-error-message" class="error-message">{{ error }}</p>
+</section>{% endif %}{% endif %}</section>

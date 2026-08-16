@@ -1,0 +1,5 @@
+<section id="vote-page" class="page elections-page vote-page">
+<h1 id="vote-title" class="page-title">Vote in {{ election_name }}</h1>
+{% if !receipt.is_empty() %}<p>Your vote is complete. Receipt number: <strong>{{ receipt }}</strong></p>{% else if confirming %}<p>Your voter code was accepted. Complete the placeholder vote below.</p><form method="post" action="/elections/{{ election_uuid }}/vote/complete"><input type="hidden" name="voting_code" value="{{ voting_code }}"><button type="submit">Complete vote</button></form>{% else %}<form method="post" action="/elections/{{ election_uuid }}/vote"><label for="voting-code-input">Voter code</label> <input id="voting-code-input" name="voting_code" pattern="[A-Za-z0-9]{4}-[A-Za-z0-9]{4}" required><button type="submit">Continue</button></form>{% if debug_bypass %}<form method="post" action="/elections/{{ election_uuid }}/vote"><input type="hidden" name="voting_code" value=""><button type="submit">Debug vote without voter code</button></form>{% endif %}{% endif %}
+<nav><a href="/elections/{{ election_uuid }}">Back to election</a></nav>
+</section>

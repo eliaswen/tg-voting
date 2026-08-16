@@ -1,0 +1,42 @@
+<section id="account-sessions-page" class="page account-page account-subpage account-sessions-page">
+<header id="account-sessions-header" class="page-header account-header account-sessions-header">
+<h1 id="account-sessions-title" class="page-title account-title">Sessions</h1>
+<p id="account-sessions-description" class="page-description account-description">Review devices currently logged in to your account.</p>
+</header>
+<form id="account-sessions-search-form" class="search-form sessions-search-form" method="get" action="/account/sessions">
+<label id="account-sessions-search-label" class="form-label search-label" for="account-sessions-search-input">Search sessions</label>
+<input id="account-sessions-search-input" class="form-control search-input" type="search" name="q" value="{{ search_query }}" placeholder="Device name or type">
+<button id="account-sessions-search-submit" class="form-button search-button" type="submit">Search</button>
+<a id="account-sessions-search-clear" class="navigation-link clear-search-link" href="/account/sessions">Clear</a>
+</form>
+<section id="account-session-results" class="page-section account-section account-session-results">
+<p id="account-sessions-empty" class="empty-state sessions-empty"{% if !sessions.is_empty() %} hidden{% endif %}>No active sessions matched your search.</p>
+<div id="account-session-list" class="account-session-list session-list">{% for session in sessions %}<article id="account-session" class="account-session session-item">
+    <h3 id="account-session-name" class="session-name">{{ session.device_name }}</h3>
+    <p id="account-session-current" class="session-current"{% if !session.current %} hidden{% endif %}>Current session</p>
+    <dl id="account-session-details" class="session-details">
+        <div id="account-session-type-detail" class="session-detail session-type-detail">
+            <dt id="account-session-type-label" class="session-detail-label session-type-label">Device type</dt>
+            <dd id="account-session-type" class="session-detail-value session-type">{{ session.device_type }}</dd>
+        </div>
+        <div id="account-session-created-detail" class="session-detail session-created-detail">
+            <dt id="account-session-created-label" class="session-detail-label session-created-label">Logged in</dt>
+            <dd id="account-session-created" class="session-detail-value session-created">{{ session.created_at }}</dd>
+        </div>
+        <div id="account-session-expires-detail" class="session-detail session-expires-detail">
+            <dt id="account-session-expires-label" class="session-detail-label session-expires-label">Expires</dt>
+            <dd id="account-session-expires" class="session-detail-value session-expires">{{ session.expires_at }}</dd>
+        </div>
+    </dl>
+    <form id="account-delete-session-form" class="account-form session-form delete-session-form" method="post" action="/account/sessions/{{ session.uuid }}/delete">
+        <button id="account-delete-session-button" class="form-button session-button delete-session-button" type="submit">Log out this session</button>
+    </form>
+</article>{% endfor %}</div>
+</section>
+<section id="account-session-actions" class="page-section account-section account-session-actions">
+<form id="account-delete-all-sessions-form" class="account-form session-form delete-all-sessions-form" method="post" action="/account/sessions/delete-all">
+<button id="account-delete-all-sessions-button" class="form-button session-button delete-all-sessions-button" type="submit">Log out of all sessions</button>
+</form>
+</section>
+<nav id="account-sessions-navigation" class="page-navigation account-navigation"><a id="account-sessions-back-link" class="navigation-link back-link" href="/account">Back to account</a></nav>
+</section>

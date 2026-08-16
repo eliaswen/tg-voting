@@ -31,12 +31,13 @@ use pages::{
     get_login_oauth_complete, get_login_oauth_device, get_login_oauth_manual_check,
     get_login_oauth_status, get_logout, get_manage_election, get_manage_election_candidates,
     get_manage_election_status, get_manage_elections, get_management, get_new_election,
-    get_reddit_link, get_settings, get_staging, get_userinfo, login_threads, post_account_role,
-    post_account_theme, post_activate_census, post_candidate_registration, post_create_census,
-    post_debug, post_delete_account_session, post_delete_all_account_sessions, post_discord_unlink,
+    get_reddit_link, get_settings, get_staging, get_userinfo, get_vote, get_voter_code,
+    login_threads, post_account_role, post_account_theme, post_activate_census,
+    post_candidate_registration, post_complete_vote, post_create_census, post_debug,
+    post_delete_account_session, post_delete_all_account_sessions, post_discord_unlink,
     post_edit_election, post_election_status, post_manage_council_candidate, post_manage_elections,
-    post_manage_presidential_ticket, post_reddit_unlink, post_settings, post_update_census_citizen,
-    post_withdraw_candidate,
+    post_manage_presidential_ticket, post_reddit_unlink, post_settings, post_timezone,
+    post_update_census_citizen, post_vote, post_voter_code, post_withdraw_candidate,
 };
 
 #[tokio::main]
@@ -195,6 +196,18 @@ async fn build_router(state: AppState) -> Router {
         .route("/about", get(get_about))
         .route("/elections", get(get_elections))
         .route("/elections/{election_uuid}", get(get_election))
+        .route(
+            "/elections/{election_uuid}/voter-code",
+            get(get_voter_code).post(post_voter_code),
+        )
+        .route(
+            "/elections/{election_uuid}/vote",
+            get(get_vote).post(post_vote),
+        )
+        .route(
+            "/elections/{election_uuid}/vote/complete",
+            post(post_complete_vote),
+        )
         .route("/login", get(get_login))
         .route("/login/oauth", get(get_login_oauth))
         .route("/login/oauth/device", get(get_login_oauth_device))
@@ -281,6 +294,7 @@ async fn build_router(state: AppState) -> Router {
         .route("/contact", get(get_contact))
         .route("/themes", get(get_list_themes_page))
         .route("/settings", get(get_settings).post(post_settings))
+        .route("/settings/timezone", post(post_timezone))
         .route("/staging", get(get_staging))
         .route("/manage/census", get(get_census).post(post_create_census))
         .route("/manage/census/{census_uuid}", get(get_census_month))
@@ -292,6 +306,7 @@ async fn build_router(state: AppState) -> Router {
             "/manage/census/{census_uuid}/citizens/{citizen_uuid}",
             post(post_update_census_citizen),
         )
+        .method_not_allowed_fallback(error_method)
         .fallback(error_not_found)
         .layer(middleware::from_fn(log_request));
 

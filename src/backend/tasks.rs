@@ -13,11 +13,25 @@ pub async fn login_threads(state: AppState) {
         supervisor_run_clean_login_threads(cleaner_state).await;
     });
 
+    let refresh_state = state.clone();
     tokio::spawn(async move {
         debug!("OAuth refresh supervisor task started");
-        supervisor_run_refresh_oauth_tokens(state).await;
+        supervisor_run_refresh_oauth_tokens(refresh_state).await;
+    });
+    tokio::spawn(async move {
+        run_election_snapshots(state).await;
     });
     debug!("Login background task supervisors spawned");
+}
+
+async fn run_election_snapshots(state: AppState) {
+    loop {
+        match sqlx::query_scalar::<_, uuid::Uuid>("SELECT uuid FROM elections WHERE status = 'upcoming' AND eligibility_snapshotted_at IS NULL AND registration_starts_at <= CURRENT_TIMESTAMP").fetch_all(&state.pool).await {
+            Ok(elections) => for election_uuid in elections { if crate::pages::voting::ensure_snapshot(&state, election_uuid).await.is_err() { error!(%election_uuid, "Failed to snapshot election eligibility"); } },
+            Err(error) => error!(?error, "Failed to find elections requiring an eligibility snapshot"),
+        }
+        sleep(Duration::from_secs(30)).await;
+    }
 }
 
 async fn worker_run_clean_login_threads(

@@ -1,0 +1,16 @@
+<section id="election-changes-page" class="page elections-page election-changes-page">
+<h1 id="election-changes-title" class="page-title elections-title">{{ election_name }} changes</h1>
+<form id="election-changes-search-form" class="search-form changes-search-form" method="get" action="/elections/{{ election_uuid }}/changes">
+<label id="election-changes-search-label" class="form-label search-label" for="election-changes-search-input">Search change log</label>
+<input id="election-changes-search-input" class="form-control search-input" type="search" name="q" value="{{ search_query }}" placeholder="Actor, target, value, or reason">
+<button id="election-changes-search-submit" class="form-button search-button" type="submit">Search</button>
+<a id="election-changes-search-clear" class="navigation-link clear-search-link" href="/elections/{{ election_uuid }}/changes">Clear</a>
+</form>
+<ul id="election-changes-list" class="item-list changes-list">{% for change in changes %}<li id="election-change-item" class="item change-item">
+<time id="election-change-time" class="change-time">{{ change.changed_at }}</time>: <span id="election-change-actor" class="change-actor">{{ change.actor }}</span> changed <span id="election-change-target" class="change-target">{{ change.target }}</span> from <span id="election-change-previous" class="change-value previous-value">{{ change.previous }}</span> to <span id="election-change-new" class="change-value new-value">{{ change.new }}</span>. Reason: <span id="election-change-reason" class="change-reason">{{ change.reason }}</span>
+</li>{% endfor %}<li id="election-changes-empty" class="item empty-state changes-empty-state"{% if !changes.is_empty() %} hidden{% endif %}>No changes matched your search.</li>
+</ul>
+<nav id="election-changes-navigation" class="page-navigation elections-navigation">
+<a id="election-changes-overview-link" class="navigation-link election-link" href="/elections/{{ election_uuid }}">Election overview</a> | <a id="election-changes-candidates-link" class="navigation-link candidates-link" href="/elections/{{ election_uuid }}/candidates">Candidates</a> | <a id="election-changes-elections-link" class="navigation-link elections-link" href="/elections">All elections</a>
+</nav>
+</section>

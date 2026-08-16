@@ -1,3 +1,4 @@
+use askama::Template;
 use axum::{
     extract::{Query, State},
     http::StatusCode,
@@ -9,9 +10,10 @@ use serde::Deserialize;
 use tracing::{debug, error, info, trace, warn};
 
 use crate::backend::login_oauth::hash_token;
+use crate::error_handling::{ErrorPage, themed_error_response};
 use crate::pages::auth::require_citizen;
 use crate::pages::login::AppState;
-use crate::render::render_page;
+use crate::render::render_template_page;
 
 const DISCORD_AUTHORIZE_URL: &str = "https://discord.com/oauth2/authorize";
 const DISCORD_TOKEN_URL: &str = "https://discord.com/api/v10/oauth2/token";
@@ -355,17 +357,9 @@ pub async fn get_reddit_link(State(state): State<AppState>, jar: CookieJar) -> R
     if let Err(response) = require_citizen(&state, &jar).await {
         return response;
     }
-    render_page(
-        include_str!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/static/account/reddit-wip.html"
-        )),
-        "Reddit account linking",
-        jar,
-        &state.pool,
-    )
-    .await
-    .into_response()
+    render_template_page(&RedditLinkPage, "Reddit account linking", jar, &state.pool)
+        .await
+        .into_response()
 }
 
 pub async fn post_reddit_unlink(State(state): State<AppState>, jar: CookieJar) -> Response {
@@ -399,14 +393,21 @@ pub async fn post_reddit_unlink(State(state): State<AppState>, jar: CookieJar) -
 }
 
 async fn social_error(state: &AppState, jar: CookieJar, message: &str) -> Response {
-    let content = include_str!(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/static/account/social-link-error.html"
-    ))
-    .replace("$${{message}}", message);
-    (
+    themed_error_response(
         StatusCode::BAD_REQUEST,
-        render_page(&content, "Social account error", jar, &state.pool).await,
+        &ErrorPage::new(
+            "Social Account Link Error",
+            message,
+            "social-link-error-page",
+        )
+        .with_social_help()
+        .with_back("/account/social", "Return to linked accounts"),
+        state,
+        jar,
     )
-        .into_response()
+    .await
 }
+
+#[derive(Template)]
+#[template(path = "account/reddit-wip.html")]
+struct RedditLinkPage;

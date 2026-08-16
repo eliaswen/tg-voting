@@ -1,0 +1,41 @@
+<section id="election-management-dashboard" class="page manage-page election-page election-management-dashboard">
+<header id="election-dashboard-header" class="page-header manage-header election-header election-dashboard-header">
+<p id="election-dashboard-context" class="page-context election-context"><a id="election-dashboard-list-link" class="navigation-link back-link" href="/manage/elections">Election management</a></p>
+<h1 id="election-dashboard-title" class="page-title manage-title election-title">Season {{ season }}: {{ name }}</h1>
+<p>{{ description }}</p>
+<p>Election type: {{ election_type }}</p>
+<p id="election-dashboard-status" class="status-message election-status">Current status: <strong id="election-dashboard-status-value" class="status-value">{{ status }}</strong></p>
+<p id="election-dashboard-description" class="page-description manage-description">Use this dashboard to choose the part of the election you want to manage.</p>
+</header>
+
+<section id="election-dashboard-actions" class="page-section manage-section election-section election-dashboard-actions">
+<h2 id="election-dashboard-actions-title" class="section-title manage-section-title">Management</h2>
+<ul id="election-dashboard-actions-list" class="item-list management-navigation-list election-management-list">
+<li id="election-dashboard-edit-item" class="item management-navigation-item"><h3 id="election-dashboard-edit-title" class="item-title">Election details and schedule</h3><p id="election-dashboard-edit-description" class="item-description">Edit the season name, registration dates, voting dates, and maximum council choices.</p><a id="election-dashboard-edit-link" class="navigation-link action-link" href="/manage/elections/{{ election_uuid }}/edit">Edit details and schedule</a></li>
+<li id="election-dashboard-status-item" class="item management-navigation-item"><h3 id="election-dashboard-status-title" class="item-title">Election status</h3><p id="election-dashboard-status-description" class="item-description">Move the election between draft, registration, voting, finished, and other supported statuses with a recorded reason.</p><a id="election-dashboard-status-link" class="navigation-link action-link" href="/manage/elections/{{ election_uuid }}/status">Manage election status</a></li>
+<li id="election-dashboard-candidates-item" class="item management-navigation-item"><h3 id="election-dashboard-candidates-title" class="item-title">Candidate administration</h3><p id="election-dashboard-candidates-description" class="item-description">Review presidential tickets, council candidates, registration statuses, parties, names, and candidate messages.</p><a id="election-dashboard-candidates-link" class="navigation-link action-link" href="/manage/elections/{{ election_uuid }}/candidates">Manage candidates</a></li>
+</ul>
+</section>
+
+<section id="election-dashboard-schedule" class="page-section manage-section election-section election-dashboard-schedule">
+<header id="election-dashboard-schedule-header" class="section-header election-section-header">
+<h2 id="election-dashboard-schedule-title" class="section-title manage-section-title">Current schedule</h2>
+<p id="election-dashboard-schedule-description" class="section-description">These values are shown for reference. Use Edit details and schedule to change them.</p>
+</header>
+<dl id="election-dashboard-schedule-list" class="detail-list election-detail-list">
+<dt id="election-dashboard-registration-label" class="detail-label">Candidate registration</dt><dd id="election-dashboard-registration-value" class="detail-value"><span id="election-dashboard-registration-start">{{ registration_starts_at }}</span> to <span id="election-dashboard-registration-end">{{ registration_ends_at }}</span></dd>
+<dt id="election-dashboard-voting-label" class="detail-label">Voting</dt><dd id="election-dashboard-voting-value" class="detail-value"><span id="election-dashboard-voting-start">{{ voting_starts_at }}</span> to <span id="election-dashboard-voting-end">{{ voting_ends_at }}</span></dd>
+<dt id="election-dashboard-council-label" class="detail-label">Maximum council choices</dt><dd id="election-dashboard-council-value" class="detail-value">{{ maximum_council_choices }}</dd>
+</dl>
+</section>
+
+<section id="election-dashboard-public" class="page-section manage-section election-section election-dashboard-public">
+<h2 id="election-dashboard-public-title" class="section-title manage-section-title">Public pages</h2>
+<p id="election-dashboard-public-description" class="section-description">Open the pages citizens see without leaving this election context.</p>
+<nav id="election-dashboard-public-navigation" class="item-navigation public-navigation"><a id="election-dashboard-public-overview-link" class="navigation-link public-link" href="/elections/{{ election_uuid }}">Election overview</a> | <a id="election-dashboard-public-candidates-link" class="navigation-link public-link" href="/elections/{{ election_uuid }}/candidates">Candidate list</a> | <a id="election-dashboard-public-changes-link" class="navigation-link public-link" href="/elections/{{ election_uuid }}/changes">Change log</a></nav>
+</section>
+
+<nav id="election-dashboard-navigation" class="page-navigation manage-navigation election-navigation">
+<a id="election-dashboard-back-link" class="navigation-link back-link" href="/manage/elections">Back to all elections</a> | <a id="election-dashboard-management-link" class="navigation-link management-link" href="/manage">Management home</a>
+</nav>
+</section>

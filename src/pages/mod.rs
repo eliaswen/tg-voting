@@ -4,6 +4,7 @@ pub mod auth;
 pub mod candidates;
 pub mod census;
 pub mod debug;
+pub mod election_lifecycle;
 pub mod elections;
 pub mod homepage;
 pub mod info;
@@ -14,6 +15,7 @@ pub mod management;
 pub mod settings;
 pub mod social_links;
 pub mod themes;
+pub mod voting;
 
 pub use crate::backend::tasks::login_threads;
 
@@ -50,9 +52,10 @@ pub use manage_elections::{
     post_edit_election, post_manage_elections,
 };
 pub use management::get_management;
-pub use settings::{get_settings, post_settings};
+pub use settings::{get_settings, post_settings, post_timezone};
 pub use social_links::{
     get_discord_callback, get_discord_link, get_reddit_link, post_discord_unlink,
     post_reddit_unlink,
 };
 pub use themes::get_list_themes_page;
+pub use voting::{get_vote, get_voter_code, post_complete_vote, post_vote, post_voter_code};

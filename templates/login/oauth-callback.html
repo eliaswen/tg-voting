@@ -1,0 +1,39 @@
+<section id="oauth-callback-page" class="page login-page oauth-callback-page">
+    <section id="oauth-callback-pending" class="page-state login-state pending-state">
+        <h1 id="oauth-callback-title" class="page-title login-title oauth-callback-title">Signing you in…</h1>
+        <noscript id="oauth-callback-noscript" class="noscript-message oauth-callback-noscript">Automatic redirection requires Javascript. Please click <a id="oauth-callback-manual-link" class="navigation-link manual-check-link" href="/login/oauth/manual-check/{{ request_id }}">here</a> to continue.</noscript>
+    </section>
+    <section id="oauth-callback-session-error" class="page-state login-state error-state session-error-state" hidden>
+        <h1 id="oauth-callback-session-error-title" class="page-title error-title">Login error</h1>
+        <p id="oauth-callback-session-error-message" class="error-message">Could not retrieve your session. Please <a id="oauth-callback-session-retry" class="navigation-link login-link" href="/login">try again</a>.</p>
+    </section>
+    <section id="oauth-callback-oauth-error" class="page-state login-state error-state oauth-error-state" hidden>
+        <h1 id="oauth-callback-oauth-error-title" class="page-title error-title">Login error</h1>
+        <p id="oauth-callback-oauth-error-message" class="error-message">The identity provider has rejected your login. Please <a id="oauth-callback-oauth-retry" class="navigation-link login-link" href="/login">try again</a>.</p>
+    </section>
+    <section id="oauth-callback-unknown-error" class="page-state login-state error-state unknown-error-state" hidden>
+        <h1 id="oauth-callback-unknown-error-title" class="page-title error-title">Login error</h1>
+        <p id="oauth-callback-unknown-error-message" class="error-message">An unexpected error occurred. Please <a id="oauth-callback-unknown-retry" class="navigation-link login-link" href="/login">try again</a>.</p>
+    </section>
+</section>
+
+<script id="oauth-callback-script" class="page-script login-script">
+    const es = new EventSource("/login/oauth/status/{{ request_id }}");
+
+    es.addEventListener("redirect", e => {
+        window.location.href = e.data;
+        es.close();
+    });
+
+    es.addEventListener("error", e => {
+        document.getElementById("oauth-callback-pending").hidden = true;
+        if (e.data === "session-error") {
+            document.getElementById("oauth-callback-session-error").hidden = false;
+        } else if (e.data === "oauth-failure") {
+            document.getElementById("oauth-callback-oauth-error").hidden = false;
+        } else {
+            document.getElementById("oauth-callback-unknown-error").hidden = false;
+        }
+        es.close();
+    });
+</script>

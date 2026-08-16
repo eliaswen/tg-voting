@@ -1,0 +1,37 @@
+<section id="election-status-page" class="page manage-page election-status-page">
+    <header id="election-status-header" class="page-header manage-header election-header status-header">
+    <p id="election-status-context" class="page-context election-context"><a id="election-status-dashboard-link" class="navigation-link back-link" href="/manage/elections/{{ election_uuid }}">Election dashboard</a></p>
+    <h1 id="election-status-title" class="page-title manage-title">Season {{ season }} status</h1>
+    <p id="election-status-description" class="page-description manage-description">Change the operating status for {{ name }}. Every status change requires a reason and is added to the public change log.</p>
+    </header>
+    <section id="election-status-summary" class="page-section status-summary-section">
+        <p id="election-status-name" class="election-detail election-name">Name: <span id="election-status-name-value" class="detail-value">{{ name }}</span>
+</p>
+        <p id="election-status-current" class="election-detail election-status">Current status: <span id="election-status-current-value" class="detail-value status-value">{{ status }}</span>
+</p>
+        <p id="election-status-registration" class="election-detail registration-period">Candidate registration: <span id="election-status-registration-start" class="date-value">{{ registration_starts_at }}</span> to <span id="election-status-registration-end" class="date-value">{{ registration_ends_at }}</span>
+</p>
+        <p id="election-status-voting" class="election-detail voting-period">Voting: <span id="election-status-voting-start" class="date-value">{{ voting_starts_at }}</span> to <span id="election-status-voting-end" class="date-value">{{ voting_ends_at }}</span>
+</p>
+        <p id="election-status-council-choices" class="election-detail council-choices">Maximum council choices: <span id="election-status-council-choices-value" class="detail-value">{{ maximum_council_choices }}</span>
+</p>
+    </section>
+    {% if debug_mode %}<section><h2>Debug controls</h2>{% for stage in ["draft", "upcoming", "registration", "voting", "counting", "closed", "certified", "canceled", "schedule", "users", "candidates"] %}<form method="post" action="/manage/elections/{{ election_uuid }}/status"><input type="hidden" name="status" value="{{ stage }}"><input type="hidden" name="reason" value="Debug action"><input type="hidden" name="debug" value="true"><button type="submit">Debug {{ stage }}</button></form>{% endfor %}</section>{% endif %}
+    <section id="election-status-change-section" class="page-section status-change-section">
+<h2 id="election-status-change-title" class="section-title manage-section-title">Change status</h2>
+<form id="election-status-change-form" class="manage-form status-form" method="post" action="/manage/elections/{{ election_uuid }}/status">
+<p id="election-status-field" class="form-field status-field">
+<label id="election-status-label" class="form-label" for="election-status-select">Status</label> <select id="election-status-select" class="form-control status-select" name="status">{% for option in statuses %}<option id="form-option" class="select-option" value="{{ option.value }}"{% if option.selected %} selected{% endif %}>{{ option.value }}</option>{% endfor %}</select>
+</p>
+<p id="election-status-reason-field" class="form-field reason-field">
+<label id="election-status-reason-label" class="form-label" for="election-status-reason-input">Reason</label> <input id="election-status-reason-input" class="form-control text-input reason-input" type="text" name="reason" required>
+</p>
+<p class="form-field"><label for="expected-resume-input">Expected resume date when pausing</label> <input id="expected-resume-input" type="datetime-local" name="expected_resume_at"></p>
+<fieldset><legend>Revised schedule when resuming</legend><p>All dates are required when resuming a paused election.</p><label>Registration starts <input type="datetime-local" name="registration_starts_at"></label><br><label>Registration ends <input type="datetime-local" name="registration_ends_at"></label><br><label>Voting starts <input type="datetime-local" name="voting_starts_at"></label><br><label>Voting ends <input type="datetime-local" name="voting_ends_at"></label></fieldset>
+<button id="election-status-submit" class="form-button submit-button" type="submit">Change status</button>
+</form>
+</section>
+    <nav id="election-status-navigation" class="page-navigation manage-navigation">
+<a id="election-status-candidates-link" class="navigation-link candidates-link" href="/manage/elections/{{ election_uuid }}/candidates">Manage candidates</a> | <a id="election-status-changes-link" class="navigation-link changes-link" href="/elections/{{ election_uuid }}/changes">Public change log</a> | <a id="election-status-back-link" class="navigation-link back-link" href="/manage/elections/{{ election_uuid }}">Back to election dashboard</a>
+</nav>
+</section>

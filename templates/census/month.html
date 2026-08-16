@@ -1,0 +1,65 @@
+<section id="census-month-page" class="page manage-page census-page census-month-page">
+<header id="census-month-header" class="page-header manage-header census-month-header">
+<p id="census-month-context" class="page-context census-page-context"><a id="census-month-dashboard-link" class="navigation-link back-link" href="/manage/census">Census management</a></p>
+<h1 id="census-month-title" class="page-title manage-title census-month-title">{{ selected_month }} census</h1>
+<p id="census-month-status" class="status-message census-status selected-census-status">Status: <strong id="census-month-status-value" class="status-value census-status-value">{{ selected_status }}</strong></p>
+<p id="census-month-description" class="page-description census-description">Review and update the records for this month. User information cannot be changed, and is displayed for reference only. Social links (Discord/Reddit) can only be changed by the citizens.</p>
+</header>
+
+<section id="census-activation-section" class="page-section manage-section census-section census-activation-section"{% if active %} hidden{% endif %}>
+<header id="census-activation-header" class="section-header census-section-header census-activation-header">
+<h2 id="census-activation-title" class="section-title manage-section-title census-section-title">Use this census</h2>
+<p id="census-activation-description" class="section-description census-section-description">Activating this month replaces the census currently used by the application. The previous monthly record remains stored.</p>
+</header>
+<form id="census-activation-form" class="manage-form census-form census-activation-form" method="post" action="/manage/census/{{ census_uuid }}/activate">
+<button id="census-activation-submit" class="form-button submit-button census-activation-button" type="submit">Use this census now</button>
+</form>
+</section>
+
+<section id="census-citizens-section" class="page-section manage-section census-section census-citizens-section">
+<header id="census-citizens-header" class="section-header census-section-header census-citizens-header">
+<h2 id="census-citizens-title" class="section-title manage-section-title census-section-title">Citizen records</h2>
+<p id="census-citizens-description" class="section-description census-section-description">Citizen ID and census status are the editable fields. The save button only saves the current row.</p>
+</header>
+<form id="census-citizens-search-form" class="search-form census-search-form" method="get" action="/manage/census/{{ census_uuid }}">
+<label id="census-citizens-search-label" class="form-label search-label" for="census-citizens-search-input">Search citizens</label>
+<input id="census-citizens-search-input" class="form-control search-input" type="search" name="q" value="{{ search_query }}" placeholder="Name, username, citizen ID, or status">
+<button id="census-citizens-search-submit" class="form-button search-button" type="submit">Search</button>
+<a id="census-citizens-search-clear" class="navigation-link clear-search-link" href="/manage/census/{{ census_uuid }}">Clear</a>
+</form>
+<div id="census-table-container" class="table-container census-table-container">
+<table id="census-citizens-table" class="data-table manage-table census-table citizens-table" width="100%">
+<thead id="census-citizens-table-head" class="table-head census-table-head">
+<tr id="census-citizens-heading-row" class="table-row heading-row census-heading-row">
+<th id="census-heading-oauth-username" class="table-heading identity-heading oauth-username-heading" scope="col">OAuth username</th>
+<th id="census-heading-display-name" class="table-heading identity-heading display-name-heading" scope="col">Display name</th>
+<th id="census-heading-discord" class="table-heading social-heading discord-heading" scope="col">Discord username</th>
+<th id="census-heading-reddit" class="table-heading social-heading reddit-heading" scope="col">Reddit username</th>
+<th id="census-heading-citizen-id" class="table-heading census-field-heading citizen-id-heading" scope="col">Citizen ID</th>
+<th id="census-heading-status" class="table-heading census-field-heading status-heading" scope="col">Census status</th>
+<th id="census-heading-actions" class="table-heading action-heading census-action-heading" scope="col">Actions</th>
+</tr>
+</thead>
+<tbody id="census-citizens-table-body" class="table-body census-table-body">
+{% for citizen in citizens %}<tr id="census-citizen-row-{{ citizen.uuid }}" class="table-row data-row census-citizen-row">
+<td id="census-oauth-username-{{ citizen.uuid }}" class="table-cell identity-cell oauth-username-cell"><span id="census-oauth-username-value-{{ citizen.uuid }}" class="identity-value oauth-username-value">{{ citizen.oauth_username }}</span></td>
+<td id="census-display-name-{{ citizen.uuid }}" class="table-cell identity-cell display-name-cell"><span id="census-display-name-value-{{ citizen.uuid }}" class="identity-value display-name-value">{{ citizen.display_name }}</span></td>
+<td id="census-discord-username-{{ citizen.uuid }}" class="table-cell social-cell discord-username-cell"><span id="census-discord-username-value-{{ citizen.uuid }}" class="social-value discord-username-value">{{ citizen.discord_username }}</span></td>
+<td id="census-reddit-username-{{ citizen.uuid }}" class="table-cell social-cell reddit-username-cell"><span id="census-reddit-username-value-{{ citizen.uuid }}" class="social-value reddit-username-value">{{ citizen.reddit_username }}</span></td>
+<td id="census-citizen-id-{{ citizen.uuid }}" class="table-cell editable-cell citizen-id-cell"><input id="census-citizen-id-input-{{ citizen.uuid }}" class="form-control table-control text-input citizen-id-input" type="text" name="citizen_id" value="{{ citizen.citizen_id }}" maxlength="100" form="census-citizen-form-{{ citizen.uuid }}"></td>
+<td id="census-status-{{ citizen.uuid }}" class="table-cell editable-cell census-status-cell"><select id="census-status-select-{{ citizen.uuid }}" class="form-control table-control select-control census-status-select" name="status" form="census-citizen-form-{{ citizen.uuid }}">
+<option value="filled_out"{% if citizen.status == "filled_out" %} selected{% endif %}>Filled out</option><option value="ineligible"{% if citizen.status == "ineligible" %} selected{% endif %}>Ineligible</option><option value="incorrect"{% if citizen.status == "incorrect" %} selected{% endif %}>Incorrect</option><option value="not_filled_out"{% if citizen.status == "not_filled_out" %} selected{% endif %}>Not filled out</option><option value="other"{% if citizen.status == "other" %} selected{% endif %}>Other</option><option value="to_be_set"{% if citizen.status == "to_be_set" %} selected{% endif %}>To be set</option>
+</select></td>
+<td id="census-actions-{{ citizen.uuid }}" class="table-cell action-cell census-action-cell"><form id="census-citizen-form-{{ citizen.uuid }}" class="manage-form table-form census-citizen-form" method="post" action="/manage/census/{{ census_uuid }}/citizens/{{ citizen.uuid }}"><button id="census-citizen-save-{{ citizen.uuid }}" class="form-button table-button submit-button census-save-button" type="submit">Save</button></form></td>
+</tr>{% endfor %}
+<tr id="census-citizens-empty" class="table-row empty-row census-empty-row"{% if !citizens.is_empty() %} hidden{% endif %}><td id="census-citizens-empty-cell" class="table-cell empty-state census-empty-state" colspan="7">No citizens matched your search.</td></tr>
+</tbody>
+</table>
+</div>
+</section>
+
+<nav id="census-month-navigation" class="page-navigation manage-navigation census-management-navigation">
+<a id="census-month-back-link" class="navigation-link back-link" href="/manage/census">Back to census management</a> |
+<a id="census-month-management-link" class="navigation-link management-link" href="/manage">Management home</a>
+</nav>
+</section>

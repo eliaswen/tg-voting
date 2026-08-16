@@ -1,3 +1,4 @@
+use askama::Template;
 use axum::{
     extract::{Query, State},
     response::{IntoResponse, Redirect, Response},
@@ -7,9 +8,10 @@ use serde::Deserialize;
 use sqlx::Row;
 use tracing::{debug, error, trace};
 
-use crate::pages::auth::{html_escape, require_citizen};
+use crate::error_handling::{ErrorPage, themed_error_response};
+use crate::pages::auth::require_citizen;
 use crate::pages::login::AppState;
-use crate::render::{render_page, theme_name, theme_options};
+use crate::render::{render_template_page, theme_name};
 
 #[derive(Deserialize, Default)]
 pub struct AccountSearch {
@@ -38,49 +40,18 @@ pub async fn get_account_overview(State(state): State<AppState>, jar: CookieJar)
         Ok(None) => return Redirect::to("/login").into_response(),
         Err(error) => return account_error(&state, jar, error).await,
     };
-    let content = include_str!(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/static/account/overview.html"
-    ))
-    .replace(
-        "$${{username}}",
-        &html_escape(account.try_get("preferred_username").unwrap_or("")),
-    )
-    .replace(
-        "$${{email}}",
-        &html_escape(account.try_get("email").unwrap_or("")),
-    )
-    .replace(
-        "$${{display_name}}",
-        &html_escape(account.try_get("display_name").unwrap_or("")),
-    )
-    .replace(
-        "$${{citizen_id}}",
-        &html_escape(
-            account
-                .try_get::<Option<String>, _>("citizen_id")
-                .unwrap_or_default()
-                .as_deref()
-                .unwrap_or("Not assigned"),
-        ),
-    )
-    .replace(
-        "$${{role_section}}",
-        if state.app_mode == 1 {
-            include_str!(concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/static/account/role-form.html"
-            ))
-            .replace(
-                "$${{current_role}}",
-                &account.get::<i64, _>("role").to_string(),
-            )
-        } else {
-            String::new()
-        }
-        .as_str(),
-    );
-    render_page(&content, "Account", jar, &state.pool)
+    let page = AccountOverviewPage {
+        username: account.try_get("preferred_username").unwrap_or(""),
+        email: account.try_get("email").unwrap_or(""),
+        display_name: account.try_get("display_name").unwrap_or(""),
+        citizen_id: account
+            .try_get::<Option<String>, _>("citizen_id")
+            .unwrap_or_default()
+            .unwrap_or_else(|| "Not assigned".to_string()),
+        current_role: account.get("role"),
+        staging: state.app_mode != 2,
+    };
+    render_template_page(&page, "Account", jar, &state.pool)
         .await
         .into_response()
 }
@@ -113,63 +84,14 @@ pub async fn get_account_social(State(state): State<AppState>, jar: CookieJar) -
         .unwrap_or_default();
     let discord_available =
         state.discord_client_id.is_some() && state.discord_client_secret.is_some();
-    let content = include_str!(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/static/account/social.html"
-    ))
-    .replace(
-        "$${{discord_username}}",
-        &html_escape(discord_username.as_deref().unwrap_or("Not linked")),
-    )
-    .replace(
-        "$${{discord_connected_hidden}}",
-        if discord_username.is_some() {
-            ""
-        } else {
-            "hidden"
-        },
-    )
-    .replace(
-        "$${{discord_disconnected_hidden}}",
-        if discord_username.is_none() {
-            ""
-        } else {
-            "hidden"
-        },
-    )
-    .replace(
-        "$${{discord_link_hidden}}",
-        if discord_username.is_none() && discord_available {
-            ""
-        } else {
-            "hidden"
-        },
-    )
-    .replace(
-        "$${{discord_unavailable_hidden}}",
-        if discord_available { "hidden" } else { "" },
-    )
-    .replace(
-        "$${{reddit_username}}",
-        &html_escape(reddit_username.as_deref().unwrap_or("Not linked")),
-    )
-    .replace(
-        "$${{reddit_connected_hidden}}",
-        if reddit_username.is_some() {
-            ""
-        } else {
-            "hidden"
-        },
-    )
-    .replace(
-        "$${{reddit_disconnected_hidden}}",
-        if reddit_username.is_none() {
-            ""
-        } else {
-            "hidden"
-        },
-    );
-    render_page(&content, "Linked accounts", jar, &state.pool)
+    let page = AccountSocialPage {
+        discord_username: discord_username.as_deref().unwrap_or("Not linked"),
+        discord_connected: discord_username.is_some(),
+        discord_available,
+        reddit_username: reddit_username.as_deref().unwrap_or("Not linked"),
+        reddit_connected: reddit_username.is_some(),
+    };
+    render_template_page(&page, "Linked accounts", jar, &state.pool)
         .await
         .into_response()
 }
@@ -195,13 +117,12 @@ pub async fn get_account_appearance(State(state): State<AppState>, jar: CookieJa
         Ok(theme) => theme.parse().unwrap_or(1),
         Err(error) => return account_error(&state, jar, error).await,
     };
-    let content = include_str!(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/static/account/appearance.html"
-    ))
-    .replace("$${{current_theme}}", theme_name(theme))
-    .replace("$${{theme_options}}", &theme_options(theme));
-    render_page(&content, "Account appearance", jar, &state.pool)
+    let page = AccountAppearancePage {
+        current_theme: theme_name(theme),
+        selected_theme: theme,
+        themes: &[(0, "Basic"), (1, "white-simple"), (2, "black-simple")],
+    };
+    render_template_page(&page, "Account appearance", jar, &state.pool)
         .await
         .into_response()
 }
@@ -221,98 +142,105 @@ pub async fn get_account_sessions(
         .map(|cookie| crate::backend::login_oauth::hash_token(cookie.value()))
         .unwrap_or_default();
     let pattern = format!("%{}%", search.q.trim());
-    let sessions = match sqlx::query(
-        "SELECT uuid, COALESCE(device_type, 'Unknown') AS device_type,
+    let timezone = crate::render::timezone(&jar);
+    let sessions_query = "SELECT uuid, COALESCE(device_type, 'Unknown') AS device_type,
                 COALESCE(device_name, 'Unknown device') AS device_name,
-                created_at, expires_at, auth_code_hash = $2 AS current_session
+                to_char(created_at AT TIME ZONE 'Europe/Paris', 'YYYY-MM-DD HH24:MI') || ' Europe/Paris' AS created_at,
+                to_char(expires_at AT TIME ZONE 'Europe/Paris', 'YYYY-MM-DD HH24:MI') || ' Europe/Paris' AS expires_at,
+                auth_code_hash = $2 AS current_session
          FROM sessions
          WHERE associated_citizen_id = $1
          AND expires_at > CURRENT_TIMESTAMP
          AND revoked_at IS NULL
          AND ($3 = '%%' OR COALESCE(device_type, '') ILIKE $3 OR COALESCE(device_name, '') ILIKE $3)
-         ORDER BY created_at DESC",
-    )
-    .bind(citizen.uuid)
-    .bind(&current_hash)
-    .bind(&pattern)
-    .fetch_all(&state.pool)
-    .await
+         ORDER BY sessions.created_at DESC".replace("Europe/Paris", &timezone);
+    let sessions = match sqlx::query(sqlx::AssertSqlSafe(sessions_query.as_str()))
+        .bind(citizen.uuid)
+        .bind(&current_hash)
+        .bind(&pattern)
+        .fetch_all(&state.pool)
+        .await
     {
         Ok(sessions) => sessions,
         Err(error) => return account_error(&state, jar, error).await,
     };
-    let mut session_items = String::new();
+    let mut session_items = Vec::new();
     for session in &sessions {
         let session_uuid: uuid::Uuid = session.get("uuid");
-        session_items.push_str(
-            &include_str!(concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/static/account/session-item.html"
-            ))
-            .replace(
-                "$${{device_name}}",
-                &html_escape(session.get("device_name")),
-            )
-            .replace(
-                "$${{device_type}}",
-                &html_escape(session.get("device_type")),
-            )
-            .replace(
-                "$${{created_at}}",
-                &session
-                    .get::<chrono::DateTime<chrono::Utc>, _>("created_at")
-                    .format("%Y-%m-%d %H:%M UTC")
-                    .to_string(),
-            )
-            .replace(
-                "$${{expires_at}}",
-                &session
-                    .get::<chrono::DateTime<chrono::Utc>, _>("expires_at")
-                    .format("%Y-%m-%d %H:%M UTC")
-                    .to_string(),
-            )
-            .replace(
-                "$${{current_session_hidden}}",
-                if session.get("current_session") {
-                    ""
-                } else {
-                    "hidden"
-                },
-            )
-            .replace("$${{session_uuid}}", &session_uuid.to_string()),
-        );
+        session_items.push(AccountSessionItem {
+            uuid: session_uuid,
+            device_name: session.get("device_name"),
+            device_type: session.get("device_type"),
+            created_at: session.get("created_at"),
+            expires_at: session.get("expires_at"),
+            current: session.get("current_session"),
+        });
     }
     debug!(
         citizen_id = citizen.id,
         result_count = sessions.len(),
         "Retrieved account sessions"
     );
-    let content = include_str!(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/static/account/sessions.html"
-    ))
-    .replace("$${{search_query}}", &html_escape(search.q.trim()))
-    .replace("$${{session_items}}", &session_items)
-    .replace(
-        "$${{sessions_empty_hidden}}",
-        if sessions.is_empty() { "" } else { "hidden" },
-    );
-    render_page(&content, "Account sessions", jar, &state.pool)
+    let page = AccountSessionsPage {
+        search_query: search.q.trim(),
+        sessions: &session_items,
+    };
+    render_template_page(&page, "Account sessions", jar, &state.pool)
         .await
         .into_response()
 }
 
+#[derive(Template)]
+#[template(path = "account/overview.html")]
+struct AccountOverviewPage<'a> {
+    username: &'a str,
+    email: &'a str,
+    display_name: &'a str,
+    citizen_id: String,
+    current_role: i64,
+    staging: bool,
+}
+
+#[derive(Template)]
+#[template(path = "account/social.html")]
+struct AccountSocialPage<'a> {
+    discord_username: &'a str,
+    discord_connected: bool,
+    discord_available: bool,
+    reddit_username: &'a str,
+    reddit_connected: bool,
+}
+
+#[derive(Template)]
+#[template(path = "account/appearance.html")]
+struct AccountAppearancePage<'a> {
+    current_theme: &'a str,
+    selected_theme: u8,
+    themes: &'a [(u8, &'static str)],
+}
+
+struct AccountSessionItem {
+    uuid: uuid::Uuid,
+    device_name: String,
+    device_type: String,
+    created_at: String,
+    expires_at: String,
+    current: bool,
+}
+
+#[derive(Template)]
+#[template(path = "account/sessions.html")]
+struct AccountSessionsPage<'a> {
+    search_query: &'a str,
+    sessions: &'a [AccountSessionItem],
+}
+
 async fn account_error(state: &AppState, jar: CookieJar, error: sqlx::Error) -> Response {
     error!(?error, "Failed to retrieve account page data");
-    render_page(
-        include_str!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/static/account/account-error.html"
-        )),
-        "Account",
+    themed_error_response(
+        axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+        &ErrorPage::new("Account Page", "There was an error while trying to retrieve your account information. This error should not be your fault.", "account-error-page").with_message_kind(5),
+        state,
         jar,
-        &state.pool,
-    )
-    .await
-    .into_response()
+    ).await
 }

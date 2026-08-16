@@ -1,0 +1,32 @@
+<section id="elections-page" class="page elections-page">
+    <header id="elections-header" class="page-header elections-header">
+        <h1 id="elections-title" class="page-title elections-title">Elections</h1>
+        <p id="elections-description" class="page-description elections-description">You can view upcoming and past elections here.</p>
+    </header>
+    <form id="elections-search-form" class="search-form elections-search-form" method="get" action="/elections">
+        <label id="elections-search-label" class="form-label search-label" for="elections-search-input">Search elections</label>
+        <input id="elections-search-input" class="form-control search-input" type="search" name="q" value="{{ search_query }}" placeholder="Season, name, or status">
+        <button id="elections-search-submit" class="form-button search-button" type="submit">Search</button>
+        <a id="elections-search-clear" class="navigation-link clear-search-link" href="/elections">Clear</a>
+    </form>
+<ol id="elections-list" class="item-list elections-list">{% for election in elections %}<li id="election-item" class="item election-item election-status-{{ election.status }}">
+    <article id="election-summary" class="election-summary">
+        <h2 id="election-name" class="item-title election-name"><a id="election-overview-link" class="navigation-link election-link" href="/elections/{{ election.uuid }}">Season {{ election.season }}: {{ election.name }}</a></h2>
+        <p id="election-description" class="item-title election-description">Description: {{ election.description }}</p>
+        <p id="election-status" class="election-detail election-status">Status: <span id="election-status-value" class="status-value">{{ election.status }}</span>
+</p>
+        <p id="election-registration" class="election-detail election-registration">Candidate registration: <span id="election-registration-value" class="date-range">{{ election.registration }}</span>
+</p>
+        <p id="election-voting" class="election-detail election-voting">Voting: <span id="election-voting-value" class="date-range">{{ election.voting }}</span>
+</p>
+        <nav id="election-navigation" class="item-navigation election-navigation">
+            <a id="election-overview-navigation-link" class="navigation-link election-link" href="/elections/{{ election.uuid }}">Overview</a> |
+            <a id="election-candidates-link" class="navigation-link candidates-link" href="/elections/{{ election.uuid }}/candidates">Candidates</a> |
+            <a id="election-changes-link" class="navigation-link changes-link" href="/elections/{{ election.uuid }}/changes">Change log</a>
+            <span id="election-registration-navigation" class="registration-navigation"{% if !election.registration_open %} hidden{% endif %}>| <a id="election-registration-link" class="navigation-link registration-link" href="/elections/{{ election.uuid }}/register">Register as a candidate</a>
+</span>
+        </nav>
+    </article>
+</li>{% endfor %}<li id="elections-empty" class="item empty-state elections-empty-state"{% if !elections.is_empty() %} hidden{% endif %}>No elections matched your search.</li>
+</ol>
+</section>

@@ -5,25 +5,26 @@ edition = "2024"
 license = "GPL-3.0-or-later"
 
 [dependencies]
+askama = "0.16.0"
 axum = { version = "0.8.9", features = ["macros"] }
 axum-extra = { version = "0.12.6", features = ["cookie"] }
 chrono = { version = "0.4.45", features = ["clock"] }
 dotenv = "0.15.0"
 env = "1.0.1"
-futures-util = "0.3.33"
+futures-util = "0.3.34"
 reqwest = { version = "0.13.2", features = ["form", "json", "rustls"] }
 serde = { version = "1.0.229", features = ["derive"] }
-sha2 = "0.10.9"
+sha2 = "0.11.0"
 sqlx = { version = "0.9.0", features = ["chrono", "postgres", "runtime-tokio", "tls-rustls-ring", "uuid"] }
 tokio = {version = "1.53.1", features = ["rt-multi-thread", "macros"]}
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["fmt", "env-filter"] }
 urlencoding = "2.1.3"
-uuid = { version = "1.24.0", features = ["v4", "v7", "serde"] }
+uuid = { version = "1.24.1", features = ["v4", "v7", "serde"] }
 
 [profile.release]
-strip = true
-lto = true
+opt-level = 3
+lto = "fat"
 codegen-units = 1
-opt-level = "s"
 panic = "abort"
+strip = "symbols"

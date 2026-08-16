@@ -1,0 +1,52 @@
+<section id="new-election-page" class="page manage-page election-page new-election-page">
+<header id="new-election-header" class="page-header manage-header election-header new-election-header">
+<p id="new-election-context" class="page-context election-context"><a id="new-election-list-link" class="navigation-link back-link" href="/manage/elections">Election management</a></p>
+<h1 id="new-election-title" class="page-title manage-title election-title">Create a new election</h1>
+<p id="new-election-description" class="page-description manage-description election-description">Create the season and its schedule here. Candidate administration and status changes become available after the election is created.</p>
+</header>
+
+<section id="new-election-form-section" class="page-section manage-section election-section new-election-form-section">
+<header id="new-election-form-header" class="section-header election-section-header">
+<h2 id="new-election-form-title" class="section-title manage-section-title">Election details</h2>
+<p id="new-election-form-description" class="section-description">Dates may be left blank and added later. When both dates in a period are provided, the end must be after the start.</p>
+</header>
+<form id="create-election-form" class="manage-form election-form create-election-form" method="post" action="/manage/elections">
+<p id="election-season-field" class="form-field election-field">
+<label id="election-season-label" class="form-label" for="election-season-input">Season</label> <input id="election-season-input" class="form-control number-input" type="number" name="season" min="1" value="{{ form.season }}" required>
+</p>
+<p id="election-name-field" class="form-field election-field">
+<label id="election-name-label" class="form-label" for="election-name-input">Name</label> <input id="election-name-input" class="form-control text-input" type="text" name="name" value="{{ form.name }}" required>
+</p>
+<p class="form-field election-field"><label class="form-label" for="election-description-input">Description</label> <textarea id="election-description-input" class="form-control text-input" name="description" required>{{ form.description }}</textarea></p>
+<p class="form-field"><label for="election-type-input">Election type</label> <select id="election-type-input" name="election_type"><option value="general">General Election</option><option value="special">Special Election</option></select></p>
+<fieldset><legend>Applicable positions</legend>
+<label><input type="checkbox" name="president" value="president"{% if form.president.is_some() %} checked{% endif %}> President</label><br>
+<label><input type="checkbox" name="council" value="council"{% if form.council.is_some() %} checked{% endif %}> Council</label><br>
+<label><input type="checkbox" name="ombudsman" value="ombudsman"{% if form.ombudsman.is_some() %} checked{% endif %}> Ombudsman</label><br>
+<label><input type="checkbox" name="moderator" value="moderator"{% if form.moderator.is_some() %} checked{% endif %}> Moderator</label><br>
+<label><input type="checkbox" name="moderator_placeholder_1" value="moderator_placeholder_1"{% if form.moderator_placeholder_1.is_some() %} checked{% endif %}> moderator placeholder 1</label><br>
+<label><input type="checkbox" name="moderator_placeholder_2" value="moderator_placeholder_2"{% if form.moderator_placeholder_2.is_some() %} checked{% endif %}> moderator placeholder 2</label>
+</fieldset>
+<p id="registration-start-field" class="form-field election-field">
+<label id="registration-start-label" class="form-label" for="registration-start-input">Registration starts</label> <input id="registration-start-input" class="form-control datetime-input" type="datetime-local" name="registration_starts_at" value="{{ form.registration_starts_at }}">
+</p>
+<p id="registration-end-field" class="form-field election-field">
+<label id="registration-end-label" class="form-label" for="registration-end-input">Registration ends</label> <input id="registration-end-input" class="form-control datetime-input" type="datetime-local" name="registration_ends_at" value="{{ form.registration_ends_at }}">
+</p>
+<p id="voting-start-field" class="form-field election-field">
+<label id="voting-start-label" class="form-label" for="voting-start-input">Voting starts</label> <input id="voting-start-input" class="form-control datetime-input" type="datetime-local" name="voting_starts_at" value="{{ form.voting_starts_at }}">
+</p>
+<p id="voting-end-field" class="form-field election-field">
+<label id="voting-end-label" class="form-label" for="voting-end-input">Voting ends</label> <input id="voting-end-input" class="form-control datetime-input" type="datetime-local" name="voting_ends_at" value="{{ form.voting_ends_at }}">
+</p>
+<p id="maximum-council-choices-field" class="form-field election-field">
+<label id="maximum-council-choices-label" class="form-label" for="maximum-council-choices-input">Maximum council choices</label> <input id="maximum-council-choices-input" class="form-control number-input" type="number" name="maximum_council_choices" min="1" value="{{ form.maximum_council_choices }}" required>
+</p>
+<p id="new-election-submit-field" class="form-field submit-field"><button id="create-election-submit" class="form-button submit-button" type="submit">Create election</button></p>
+</form>
+</section>
+
+<nav id="new-election-navigation" class="page-navigation manage-navigation election-navigation">
+<a id="new-election-cancel-link" class="navigation-link back-link" href="/manage/elections">Cancel and return to elections</a>
+</nav>
+</section>

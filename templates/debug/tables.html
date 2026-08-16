@@ -1,0 +1,5 @@
+<section id="debug-tables-page" class="page debug-page tables-debug-page">
+{% if error.is_empty() %}<ul id="debug-tables-list" class="item-list debug-list tables-list">{% for table in tables %}<li id="debug-list-item" class="item debug-item">{{ table }}</li>{% endfor %}</ul>{% else %}<section id="debug-error-page" class="page debug-page error-page debug-error-page">
+<p id="debug-error-message" class="error-message">{{ error }}</p>
+</section>{% endif %}
+</section>

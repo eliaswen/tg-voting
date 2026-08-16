@@ -1,0 +1,48 @@
+<section id="edit-election-page" class="page manage-page edit-election-page">
+    <header id="edit-election-header" class="page-header manage-header election-header edit-election-header">
+    <p id="edit-election-context" class="page-context election-context"><a id="edit-election-dashboard-link" class="navigation-link back-link" href="/manage/elections/{{ election_uuid }}">Election dashboard</a></p>
+    <h1 id="edit-election-title" class="page-title manage-title">Edit season {{ form.season }}</h1>
+    <p id="edit-election-description" class="page-description manage-description">Update the election name, schedule, and council voting limit. Candidate and election status changes are managed from their own pages.</p>
+    </header>
+    <section id="edit-election-form-section" class="page-section manage-section election-section edit-election-form-section">
+    <h2 id="edit-election-form-title" class="section-title manage-section-title">Election details and schedule</h2>
+    <form id="edit-election-form" class="manage-form election-form" method="post" action="/manage/elections/{{ election_uuid }}/edit">
+<p id="election-season-field" class="form-field election-field">
+<label id="election-season-label" class="form-label" for="election-season-input">Season</label> <input id="election-season-input" class="form-control number-input" type="number" name="season" min="1" value="{{ form.season }}" required>
+</p>
+<p id="election-name-field" class="form-field election-field">
+<label id="election-name-label" class="form-label" for="election-name-input">Name</label> <input id="election-name-input" class="form-control text-input" type="text" name="name" value="{{ form.name }}" required>
+</p>
+<p class="form-field election-field"><label class="form-label" for="election-description-input">Description</label> <textarea id="election-description-input" class="form-control text-input" name="description" required>{{ form.description }}</textarea></p>
+<p class="form-field"><label for="election-type-input">Election type</label> <select id="election-type-input" name="election_type"><option value="general"{% if form.election_type == "general" %} selected{% endif %}>General Election</option><option value="special"{% if form.election_type == "special" %} selected{% endif %}>Special Election</option></select></p>
+<fieldset><legend>Applicable positions</legend>
+<label><input type="checkbox" name="president" value="president"{% if form.president.is_some() %} checked{% endif %}> President</label><br>
+<label><input type="checkbox" name="council" value="council"{% if form.council.is_some() %} checked{% endif %}> Council</label><br>
+<label><input type="checkbox" name="ombudsman" value="ombudsman"{% if form.ombudsman.is_some() %} checked{% endif %}> Ombudsman</label><br>
+<label><input type="checkbox" name="moderator" value="moderator"{% if form.moderator.is_some() %} checked{% endif %}> Moderator</label><br>
+<label><input type="checkbox" name="moderator_placeholder_1" value="moderator_placeholder_1"{% if form.moderator_placeholder_1.is_some() %} checked{% endif %}> moderator placeholder 1</label><br>
+<label><input type="checkbox" name="moderator_placeholder_2" value="moderator_placeholder_2"{% if form.moderator_placeholder_2.is_some() %} checked{% endif %}> moderator placeholder 2</label>
+</fieldset>
+<p id="registration-start-field" class="form-field election-field">
+<label id="registration-start-label" class="form-label" for="registration-start-input">Registration starts</label> <input id="registration-start-input" class="form-control datetime-input" type="datetime-local" name="registration_starts_at" value="{{ form.registration_starts_at }}">
+</p>
+<p id="registration-end-field" class="form-field election-field">
+<label id="registration-end-label" class="form-label" for="registration-end-input">Registration ends</label> <input id="registration-end-input" class="form-control datetime-input" type="datetime-local" name="registration_ends_at" value="{{ form.registration_ends_at }}">
+</p>
+<p id="voting-start-field" class="form-field election-field">
+<label id="voting-start-label" class="form-label" for="voting-start-input">Voting starts</label> <input id="voting-start-input" class="form-control datetime-input" type="datetime-local" name="voting_starts_at" value="{{ form.voting_starts_at }}">
+</p>
+<p id="voting-end-field" class="form-field election-field">
+<label id="voting-end-label" class="form-label" for="voting-end-input">Voting ends</label> <input id="voting-end-input" class="form-control datetime-input" type="datetime-local" name="voting_ends_at" value="{{ form.voting_ends_at }}">
+</p>
+<p id="maximum-council-choices-field" class="form-field election-field">
+<label id="maximum-council-choices-label" class="form-label" for="maximum-council-choices-input">Maximum council choices</label> <input id="maximum-council-choices-input" class="form-control number-input" type="number" name="maximum_council_choices" min="1" value="{{ form.maximum_council_choices }}" required>
+</p>
+        <button id="edit-election-submit" class="form-button submit-button" type="submit">Save election</button>
+        {% if debug_mode %}<button type="submit" name="force_edit" value="true">Debug force edit</button>{% endif %}
+    </form>
+    </section>
+    <nav id="edit-election-navigation" class="page-navigation manage-navigation">
+<a id="edit-election-back-link" class="navigation-link back-link" href="/manage/elections/{{ election_uuid }}">Back to election dashboard</a>
+</nav>
+</section>
