@@ -36,7 +36,7 @@ pub async fn get_settings(State(state): State<AppState>, jar: CookieJar) -> Resp
         timezone: &timezone,
         current_theme: theme_name(theme),
         selected_theme: theme,
-        themes: &[(0, "Basic"), (1, "White Simple"), (2, "Black Simple"), (3, "OLED Black Simple"), (4, "Zeedith's Theme")],
+        themes: &[(0, "Basic"), (1, "White"), (2, "Black"), (3, "OLED Black"), (4, "Zeedith's Theme")],
     };
     render_template_page(&page, "Settings", jar, &state.pool)
         .await
