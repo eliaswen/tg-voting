@@ -4,6 +4,18 @@
         <meta id="document-charset" class="document-meta charset-meta" charset="utf-8">
         <meta id="document-viewport" class="document-meta viewport-meta" name="viewport" content="width=device-width, initial-scale=1">
         <title id="document-title" class="document-title">{{ page_title|safe }}</title>
+        <style>
+            .header-layout, .footer-layout { border-collapse: collapse; table-layout: fixed; width: 100%; }
+            .header-layout .navigation-cell, .footer-layout .navigation-cell { text-align: center; }
+            .site-navigation { white-space: nowrap; }
+
+            @media (max-width: 700px) {
+                .header-layout, .header-layout tbody, .header-layout tr, .footer-layout, .footer-layout tbody, .footer-layout tr, .header-layout td, .footer-layout td { display: block; width: 100%; box-sizing: border-box; }
+                .header-layout td, .footer-layout td { padding: 0; text-align: center; }
+                .header-layout td + td, .footer-layout td + td { margin-top: 10px; }
+                .site-navigation { white-space: normal; }
+            }
+        </style>
     </head>
     <body id="document-body" class="document-body theme-body basic-theme-body">
         <header id="site-header" class="site-header basic-theme-header">
@@ -51,10 +63,8 @@ Copyright © ewi and contributors
 </td>
 
 <td id="footer-navigation-cell" class="layout-cell navigation-cell" align="center">
-<nav id="footer-navigation" class="site-navigation footer-navigation">
-<a id="footer-home-link" class="navigation-link home-link" href="/">Home</a> |
-<a id="footer-about-link" class="navigation-link about-link" href="/about">About</a> |
-<a id="footer-elections-link" class="navigation-link elections-link" href="/elections">Elections</a>
+<nav id="footer-navigation" class="site-navigation footer-navigation">Found a problem? Report it on the
+<a id="footer-home-link" class="navigation-link home-link" href="/issues">issue tracker</a>.
 </nav>
 </td>
 

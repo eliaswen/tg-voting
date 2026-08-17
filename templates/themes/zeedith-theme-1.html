@@ -5,19 +5,59 @@
 <meta id="document-viewport" class="document-meta viewport-meta" name="viewport" content="width=device-width, initial-scale=1">
 <title id="document-title" class="document-title">{{ page_title|safe }}</title>
 <style>
-html { background: #181818; color: #e6e6e6; color-scheme: dark; font-family: Arial, sans-serif; }
+:root {
+  --term-green: #00ff41;
+  --term-green-dim: #00b32c;
+  --term-border-color: #00ff4155;
+  --term-bg: #0a0f0a;
+  --card-bg: #050f05;
+  --nav-bg: #050f05;
+  --card-radius: 2px;
+  --nav-radius: 2px;
+  --card-border-weight: 1px;
+  --global-fontsize: 1em;
+  --global-font: pixelpurl, "Courier New", Courier, "Lucida Console", Monaco, monospace;
+}
+html {
+    background: var(--term-bg);
+    color: #e6e6e6;
+    color-scheme: dark;
+    font-family: var(--global-font);
+}
+
+
+body::before {
+    content: "";
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 9999;
+    background: repeating-linear-gradient(
+        to bottom,
+        rgba(0, 255, 0, 0.1),
+        rgba(0, 255, 0, 0.1) 1px,
+        transparent 1px,
+        transparent 3px
+    );
+}
 body {
-    max-width: 1100px;
     min-height: 100vh;
-    margin: 0 auto;
-    padding: 0 18px;
+    margin: 0;
+    padding-left: 10vw;
+    padding-right: 10vw;
     line-height: 1.45;
     display: flex;
     flex-direction: column;
     box-sizing: border-box;
+    color: var(--term-green);
+    background: var(--term-bg);
+    position: relative;
 }
-a { color: #8ebbea; }
-a:hover { color: #b8d8f5; }
+a { color: var(--term-green);}
+a:hover { background-color: #001a00 !important; outline: 1px solid var(--term-green); }
 .site-header, .site-footer { padding: 18px 0; }
 .header-layout, .footer-layout { border-collapse: collapse; width: 100%; table-layout: fixed; }
 .header-layout .navigation-cell, .footer-layout .navigation-cell { text-align: center; }
@@ -25,7 +65,6 @@ a:hover { color: #b8d8f5; }
 .navigation-cell { padding: 0 10px; }
 .site-navigation { white-space: nowrap; }
 .page-content {
-    background: #222;
     border: 1px solid #444;
     padding: 24px;
     flex: 1;
@@ -69,6 +108,20 @@ a:hover { color: #b8d8f5; }
 .account-navigation-list, .management-navigation-list { list-style: none; padding: 0; }
 .account-navigation-item, .management-navigation-item { border: 1px solid #444; margin: 10px 0; padding: 14px; }
 .search-form { background: #292929; border: 1px solid #444; margin: 18px 0; padding: 12px; }
+button {
+      background: transparent !important;
+      border: 1px solid var(--term-green) !important;
+      color: var(--term-green) !important;
+      border-radius: 2px !important;
+}
+    input[type=text], input[type=number], input[type=password], textarea, select, input, button {
+      background: #050f05 !important;
+      border-color: #00ff4155 !important;
+      color: var(--term-green) !important;
+      border-radius: 2px !important;
+    }
+
+#header-account-link { font-size: 1.25em; text-decoration: none; background-color: transparent !important; outline: none !important; }
 
 @media (max-width: 700px) {
 body { padding: 0 10px; }
@@ -101,14 +154,14 @@ img, video, iframe { max-width: 100%; height: auto; }
 </td>
 <td id="header-navigation-cell" class="layout-cell navigation-cell" align="center">
 <nav id="site-navigation" class="site-navigation header-navigation">
-<a id="header-home-link" class="navigation-link home-link" href="/">Home</a> |
-<a id="header-elections-link" class="navigation-link elections-link" href="/elections">Elections</a> |
-<a id="header-settings-link" class="navigation-link settings-link" href="/settings">Settings</a>{% if management_visible %} | <a id="header-management-link" class="navigation-link management-link" href="/manage">Management</a>{% endif %} |
-<a id="header-about-link" class="navigation-link about-link" href="/about">About</a>
+<a id="header-home-link" class="navigation-link home-link" href="/">[Home]</a>
+<a id="header-elections-link" class="navigation-link elections-link" href="/elections">[Elections]</a>
+<a id="header-settings-link" class="navigation-link settings-link" href="/settings">[Settings]</a>{% if management_visible %} <a id="header-management-link" class="navigation-link management-link" href="/manage">[Management]</a>{% endif %}
+<a id="header-about-link" class="navigation-link about-link" href="/about">[About]</a>
 </nav>
 </td>
 <td id="header-account-cell" class="layout-cell account-cell" align="right">
-<a id="header-account-link" class="navigation-link account-link" href="{{ login_url }}"><button id="header-account-button" class="navigation-button account-button">{{ login_button_text|safe }}</button></a>
+<a id="header-account-link" class="navigation-link account-link" href="{{ login_url }}"><strong>{{ login_button_text|safe }}</strong></a>
 </td>
 </tr>
 </table>
@@ -125,12 +178,12 @@ img, video, iframe { max-width: 100%; height: auto; }
 <small id="footer-copyright" class="footer-copyright">Early preview<br><a id="footer-source-link" class="external-link source-link" href="https://github.com/eliaswen/tg-voting">Copyright © ewi and contributors</a></small>
 </td>
 <td id="footer-navigation-cell" class="layout-cell navigation-cell" align="center">
-<nav id="footer-navigation" class="site-navigation footer-navigation">Found a problem? Report it on the
+<nav id="footer-navigation" class="site-navigation footer-navigation">Found a problem? Report it on the 
 <a id="footer-home-link" class="navigation-link home-link" href="/issues">issue tracker</a>.
 </nav>
 </td>
 <td id="footer-theme-cell" class="layout-cell theme-cell" align="right">
-<small id="footer-theme-description" class="theme-description">Black theme. Change appearance in <a id="footer-settings-link" class="navigation-link settings-link" href="/settings">settings</a>.</small>
+<small id="footer-theme-description" class="theme-description">This theme is a copy of the <a href="https://tg.zerr.cc">ARPD's default theme</a>. Change appearance in <a id="footer-settings-link" class="navigation-link settings-link" href="/settings">settings</a>.</small>
 </td>
 </tr>
 </table>

@@ -131,7 +131,7 @@ pub async fn post_account_theme(
     Form(form): Form<AccountThemeForm>,
 ) -> Response {
     trace!(theme = form.theme, "Handling account theme update");
-    if form.theme > 2 {
+    if form.theme > 4 {
         warn!(theme = form.theme, "Rejected unknown account theme");
         return themed_error_response(
             StatusCode::BAD_REQUEST,

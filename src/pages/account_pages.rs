@@ -120,7 +120,7 @@ pub async fn get_account_appearance(State(state): State<AppState>, jar: CookieJa
     let page = AccountAppearancePage {
         current_theme: theme_name(theme),
         selected_theme: theme,
-        themes: &[(0, "Basic"), (1, "white-simple"), (2, "black-simple")],
+        themes: &[(0, "Basic"), (1, "White"), (2, "Black"), (3, "OLED Black"), (4, "Zeedith's Theme")],
     };
     render_template_page(&page, "Account appearance", jar, &state.pool)
         .await

@@ -36,7 +36,7 @@ pub async fn get_settings(State(state): State<AppState>, jar: CookieJar) -> Resp
         timezone: &timezone,
         current_theme: theme_name(theme),
         selected_theme: theme,
-        themes: &[(0, "Basic"), (1, "white-simple"), (2, "black-simple")],
+        themes: &[(0, "Basic"), (1, "White Simple"), (2, "Black Simple"), (3, "OLED Black Simple"), (4, "Zeedith's Theme")],
     };
     render_template_page(&page, "Settings", jar, &state.pool)
         .await
@@ -58,7 +58,7 @@ pub async fn post_settings(
     Form(form): Form<ThemeForm>,
 ) -> Response {
     trace!(theme = form.theme, "Handling local theme update");
-    if form.theme > 2 {
+    if form.theme > 4 {
         warn!(theme = form.theme, "Rejected unknown local theme");
         return themed_error_response(
             StatusCode::BAD_REQUEST,

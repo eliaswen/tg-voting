@@ -37,7 +37,7 @@ use pages::{
     post_delete_account_session, post_delete_all_account_sessions, post_discord_unlink,
     post_edit_election, post_election_status, post_manage_council_candidate, post_manage_elections,
     post_manage_presidential_ticket, post_reddit_unlink, post_settings, post_timezone,
-    post_update_census_citizen, post_vote, post_voter_code, post_withdraw_candidate,
+    post_update_census_citizen, post_vote, post_voter_code, post_withdraw_candidate, get_issues
 };
 
 #[tokio::main]
@@ -306,6 +306,7 @@ async fn build_router(state: AppState) -> Router {
             "/manage/census/{census_uuid}/citizens/{citizen_uuid}",
             post(post_update_census_citizen),
         )
+        .route("/issues", get(get_issues))
         .method_not_allowed_fallback(error_method)
         .fallback(error_not_found)
         .layer(middleware::from_fn(log_request));

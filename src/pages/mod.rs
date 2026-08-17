@@ -37,7 +37,7 @@ pub use census::{
 pub use debug::{get_debug, post_debug};
 pub use elections::{get_election, get_elections};
 pub use homepage::get_homepage;
-pub use info::{get_about, get_contact, get_staging};
+pub use info::{get_about, get_contact, get_staging, get_issues};
 pub use login::{
     get_login, get_login_oauth, get_login_oauth_callback, get_login_oauth_complete,
     get_login_oauth_device, get_login_oauth_manual_check, get_login_oauth_status, get_logout,

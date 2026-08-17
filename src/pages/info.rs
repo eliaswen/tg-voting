@@ -44,6 +44,13 @@ pub async fn get_staging(State(state): State<AppState>, jar: CookieJar) -> impl 
         .into_response()
 }
 
+pub async fn get_issues(State(state): State<AppState>, jar: CookieJar) -> impl IntoResponse {
+    trace!("Handling issues page request");
+    render_template_page(&IssuesPage, "Issues", jar, &state.pool)
+        .await
+        .into_response()
+}
+
 #[derive(Template)]
 #[template(path = "info/about.html")]
 struct AboutPage<'a> {
@@ -57,3 +64,7 @@ struct ContactPage;
 #[derive(Template)]
 #[template(path = "info/staging.html")]
 struct StagingPage;
+
+#[derive(Template)]
+#[template(path = "info/issues.html")]
+struct IssuesPage;

@@ -30,8 +30,9 @@ pub fn theme_name(theme: u8) -> &'static str {
     trace!(theme, "Resolving theme name");
     match theme {
         0 => "Basic",
-        1 => "white-simple",
-        2 => "black-simple",
+        1 => "White Simple",
+        2 => "Black Simple",
+        3 => "OLED Black Simple",
         _ => "Unknown",
     }
 }
@@ -59,6 +60,26 @@ struct WhiteSimpleTheme<'a> {
 #[derive(Template)]
 #[template(path = "themes/black-simple-theme.html")]
 struct BlackSimpleTheme<'a> {
+    page_content: &'a str,
+    page_title: &'a str,
+    login_url: &'a str,
+    login_button_text: &'a str,
+    management_visible: bool,
+}
+
+#[derive(Template)]
+#[template(path = "themes/oled-black-simple-theme.html")]
+struct OLEDBlackSimpleTheme<'a> {
+    page_content: &'a str,
+    page_title: &'a str,
+    login_url: &'a str,
+    login_button_text: &'a str,
+    management_visible: bool,
+}
+
+#[derive(Template)]
+#[template(path = "themes/zeedith-theme-1.html")]
+struct ZeedithTheme1<'a> {
     page_content: &'a str,
     page_title: &'a str,
     login_url: &'a str,
@@ -111,7 +132,7 @@ fn show_page_with_theme(
         "Login".to_string()
     };
 
-    if theme <= 2 {
+    if theme <= 4 {
         let rendered = match theme {
             0 => {
                 trace!(page_title, "Applied basic theme");
@@ -135,7 +156,7 @@ fn show_page_with_theme(
                 }
                 .render()
             }
-            _ => {
+            2 => {
                 trace!(page_title, "Applied black-simple theme");
                 BlackSimpleTheme {
                     page_content,
@@ -146,6 +167,29 @@ fn show_page_with_theme(
                 }
                 .render()
             }
+            3 => {
+                trace!(page_title, "Applied oled-black-simple theme");
+                OLEDBlackSimpleTheme {
+                    page_content,
+                    page_title,
+                    login_url,
+                    login_button_text: &login_button_text,
+                    management_visible,
+                }
+                .render()
+            }
+            4 => {
+                trace!(page_title, "Applied zeedith-theme-1 theme");
+                ZeedithTheme1 {
+                    page_content,
+                    page_title,
+                    login_url,
+                    login_button_text: &login_button_text,
+                    management_visible,
+                }
+                .render()
+            }
+            _ => unreachable!(),
         };
         Ok(Html(rendered?))
     } else {
@@ -154,8 +198,6 @@ fn show_page_with_theme(
     }
 }
 
-/// Render a complete default-theme document when request/account state is not
-/// available (for example, an error created deep inside a transaction helper).
 pub fn render_public_fallback(page_content: &str, page_title: &str) -> Html<String> {
     show_page_with_theme(page_content, page_title, 1, false, None, false).unwrap_or_else(|_| {
         Html(
@@ -238,7 +280,6 @@ async fn render_page_context(
     }
 }
 
-/// Render a typed Askama page inside the currently selected theme document.
 pub async fn render_template_page<T: Template>(
     page: &T,
     page_title: &str,
