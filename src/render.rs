@@ -30,9 +30,10 @@ pub fn theme_name(theme: u8) -> &'static str {
     trace!(theme, "Resolving theme name");
     match theme {
         0 => "Basic",
-        1 => "White Simple",
-        2 => "Black Simple",
-        3 => "OLED Black Simple",
+        1 => "White",
+        2 => "Black",
+        3 => "OLED Black",
+        4 => "Zeedith",
         _ => "Unknown",
     }
 }
@@ -305,8 +306,8 @@ mod tests {
 
     #[test]
     fn simple_themes_are_available() {
-        assert_eq!(theme_name(1), "white-simple");
-        assert_eq!(theme_name(2), "black-simple");
+        assert_eq!(theme_name(1), "White");
+        assert_eq!(theme_name(2), "Black");
         let black = show_page_with_theme("Content", "Title", 2, false, None, false)
             .unwrap()
             .0;
