@@ -1,0 +1,9 @@
+<section class="page elections-page results-page">
+<h1>Results for {{ name }}</h1>
+{% if certified %}
+<p>These results have been certified.</p>
+{% if winners.is_empty() %}<p>No elected candidates were recorded.</p>{% else %}<dl>{% for winner in winners %}<dt>{{ winner.contest }}</dt><dd>{{ winner.name }}</dd>{% endfor %}</dl>{% endif %}
+<h2>Certification record</h2><dl>{% for certification in certifications %}<dt>{{ certification.contest }}</dt><dd>Certified by {{ certification.actor }} on {{ certification.certified_at }}: {{ certification.reason }}</dd>{% endfor %}</dl>
+<p><a href="/elections/{{ election_uuid }}/receipts">See every counted ballot receipt</a></p>
+{% else %}<p>Results will be published once the election minister has certified the election.</p>{% endif %}
+<p><a href="/elections/{{ election_uuid }}">Back to election</a></p></section>

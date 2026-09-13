@@ -74,7 +74,7 @@ struct ElectionStatusPage<'a> {
     registration_ends_at: String,
     voting_starts_at: String,
     voting_ends_at: String,
-    maximum_council_choices: i32,
+    council_seats: i32,
     statuses: &'a [StatusOption],
     debug_mode: bool,
 }
@@ -193,7 +193,7 @@ async fn render_election_management(
                 voting_starts_at AS voting_start_raw, voting_ends_at AS voting_end_raw, paused_stage,
                 COALESCE(to_char(voting_starts_at AT TIME ZONE 'Europe/Paris', 'YYYY-MM-DD HH24:MI') || ' Europe/Paris', 'Not set') AS voting_starts_at,
                 COALESCE(to_char(voting_ends_at AT TIME ZONE 'Europe/Paris', 'YYYY-MM-DD HH24:MI') || ' Europe/Paris', 'Not set') AS voting_ends_at,
-                maximum_council_choices
+                council_seats
          FROM elections WHERE uuid = $1".replace("Europe/Paris", &timezone);
     let election = sqlx::query(sqlx::AssertSqlSafe(election_query.as_str()))
         .bind(election_uuid)
@@ -245,7 +245,7 @@ async fn render_election_management(
             registration_ends_at: election.get("registration_ends_at"),
             voting_starts_at: election.get("voting_starts_at"),
             voting_ends_at: election.get("voting_ends_at"),
-            maximum_council_choices: election.get("maximum_council_choices"),
+            council_seats: election.get("council_seats"),
             statuses: &statuses,
             debug_mode: state.app_mode == 0,
         };
@@ -453,6 +453,79 @@ pub async fn post_election_status(
     if !allowed {
         return bad_request("That stage change is not allowed from the current stage.");
     }
+    if form.status == "closed" {
+        let missing = match sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM election_positions positions
+             WHERE positions.election_id = $1
+               AND positions.position IN ('president', 'council', 'ombudsman')
+               AND NOT EXISTS (
+                   SELECT 1 FROM election_results results
+                   WHERE results.election_id = positions.election_id
+                     AND results.contest = positions.position AND results.status <> 'voided'
+               )",
+        ).bind(election_uuid).fetch_one(&mut *transaction).await {
+            Ok(value) => value,
+            Err(error) => return transaction_error(error),
+        };
+        if missing != 0 {
+            return bad_request("Every configured contest must be counted before the election can close.");
+        }
+    }
+    if form.status == "certified" {
+        let unresolved = match sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM election_positions positions
+             WHERE positions.election_id = $1 AND positions.position IN ('president', 'council', 'ombudsman')
+             AND NOT EXISTS (
+                 SELECT 1 FROM election_results results
+                 WHERE results.uuid = (
+                     SELECT current.uuid FROM election_results current
+                     WHERE current.election_id = positions.election_id
+                       AND current.contest = positions.position AND current.status <> 'voided'
+                     ORDER BY current.round_number DESC LIMIT 1
+                 ) AND results.status = 'provisional' AND results.reviewed_at IS NOT NULL
+             )",
+        )
+        .bind(election_uuid)
+        .fetch_one(&mut *transaction)
+        .await
+        {
+            Ok(value) => value,
+            Err(error) => return transaction_error(error),
+        };
+        if unresolved != 0 {
+            return bad_request("Every contest must have a reviewed provisional result before certification.");
+        }
+        if let Err(error) = sqlx::query(
+            "UPDATE election_results SET status = 'certified', certified_at = clock_timestamp(),
+                    certified_by = $2, certification_reason = $3
+             WHERE uuid IN (
+                 SELECT DISTINCT ON (contest) uuid FROM election_results
+                 WHERE election_id = $1 AND status <> 'voided'
+                 ORDER BY contest, round_number DESC
+             )",
+        )
+        .bind(election_uuid)
+        .bind(actor.uuid)
+        .bind(form.reason.trim())
+        .execute(&mut *transaction)
+        .await
+        {
+            return transaction_error(error);
+        }
+        if let Err(error) = sqlx::query(
+            "INSERT INTO election_result_actions (result_id, actor_id, action, reason)
+             SELECT uuid, $2, 'certified', $3 FROM election_results
+             WHERE election_id = $1 AND status = 'certified'",
+        )
+        .bind(election_uuid)
+        .bind(actor.uuid)
+        .bind(form.reason.trim())
+        .execute(&mut *transaction)
+        .await
+        {
+            return transaction_error(error);
+        }
+    }
     if previous == "draft"
         && [
             previous_row.get::<Option<chrono::DateTime<chrono::Utc>>, _>("registration_starts_at"),
@@ -542,6 +615,17 @@ async fn run_inline_debug_action(
     election_uuid: uuid::Uuid,
     action: &str,
 ) -> Response {
+    if action == "test-presidential" {
+        let mut transaction = match state.pool.begin().await { Ok(value) => value, Err(error) => return transaction_error(error) };
+        let president_result = sqlx::query("INSERT INTO candidates (election_id, citizen_id, position, election_display_name, party) SELECT $1, citizens.uuid, 'president', 'Test President ' || row_number() OVER (), 'Test Party ' || (1 + (row_number() OVER () % 3)) FROM citizens WHERE NOT EXISTS (SELECT 1 FROM candidates WHERE election_id = $1 AND citizen_id = citizens.uuid AND status = 'active') LIMIT 5").bind(election_uuid).execute(&mut *transaction).await;
+        if let Err(error) = president_result { return transaction_error(error); }
+        let vp_result = sqlx::query("INSERT INTO candidates (election_id, citizen_id, position, election_display_name, party) SELECT $1, citizens.uuid, 'vice_president', 'Test Vice President ' || row_number() OVER (), 'Test Party ' || (1 + (row_number() OVER () % 3)) FROM citizens WHERE NOT EXISTS (SELECT 1 FROM candidates WHERE election_id = $1 AND citizen_id = citizens.uuid AND status = 'active') LIMIT 5").bind(election_uuid).execute(&mut *transaction).await;
+        if let Err(error) = vp_result { return transaction_error(error); }
+        let ticket_result = sqlx::query("WITH presidents AS (SELECT uuid, row_number() OVER (ORDER BY database_created_at DESC) AS n FROM candidates WHERE election_id = $1 AND position = 'president' AND status = 'active'), vice_presidents AS (SELECT uuid, row_number() OVER (ORDER BY database_created_at DESC) AS n FROM candidates WHERE election_id = $1 AND position = 'vice_president' AND status = 'active') INSERT INTO presidential_tickets (election_id, president_candidate_id, vice_president_candidate_id) SELECT $1, presidents.uuid, vice_presidents.uuid FROM presidents JOIN vice_presidents USING (n) ON CONFLICT DO NOTHING").bind(election_uuid).execute(&mut *transaction).await;
+        if let Err(error) = ticket_result { return transaction_error(error); }
+        if let Err(error) = transaction.commit().await { return transaction_error(error); }
+        return Redirect::to(&format!("/manage/elections/{election_uuid}/status")).into_response();
+    }
     let result = match action {
         "draft" => sqlx::query("UPDATE elections SET status = 'draft' WHERE uuid = $1").bind(election_uuid).execute(&state.pool).await,
         "upcoming" => sqlx::query("UPDATE elections SET status = 'upcoming', published_at = COALESCE(published_at, CURRENT_TIMESTAMP), registration_starts_at = CURRENT_TIMESTAMP + INTERVAL '2 minutes', registration_ends_at = CURRENT_TIMESTAMP + INTERVAL '4 minutes', voting_starts_at = CURRENT_TIMESTAMP + INTERVAL '6 minutes', voting_ends_at = CURRENT_TIMESTAMP + INTERVAL '8 minutes' WHERE uuid = $1").bind(election_uuid).execute(&state.pool).await,
@@ -552,6 +636,10 @@ async fn run_inline_debug_action(
         "schedule" => sqlx::query("UPDATE elections SET status = 'upcoming', published_at = COALESCE(published_at, CURRENT_TIMESTAMP), registration_starts_at = CURRENT_TIMESTAMP + INTERVAL '1 minute', registration_ends_at = CURRENT_TIMESTAMP + INTERVAL '3 minutes', voting_starts_at = CURRENT_TIMESTAMP + INTERVAL '5 minutes', voting_ends_at = CURRENT_TIMESTAMP + INTERVAL '8 minutes' WHERE uuid = $1").bind(election_uuid).execute(&state.pool).await,
         "users" => sqlx::query("INSERT INTO citizens (citizen_id) SELECT lpad((floor(random() * 1000000))::int::text, 6, '0') FROM generate_series(1, 20) ON CONFLICT (citizen_id) DO NOTHING").execute(&state.pool).await,
         "candidates" => sqlx::query("INSERT INTO candidates (election_id, citizen_id, position, election_display_name, party) SELECT $1, citizens.uuid, 'council', 'garbage-' || substr(gen_random_uuid()::text, 1, 8), 'garbage-party' FROM citizens ORDER BY random() LIMIT 20 ON CONFLICT DO NOTHING").bind(election_uuid).execute(&state.pool).await,
+        "test-users" => sqlx::query("INSERT INTO citizens (citizen_id) SELECT lpad((floor(random() * 1000000))::int::text, 6, '0') FROM generate_series(1, 50) ON CONFLICT (citizen_id) DO NOTHING").execute(&state.pool).await,
+        "test-parties" => sqlx::query("INSERT INTO candidates (election_id, citizen_id, position, election_display_name, party) SELECT $1, citizens.uuid, 'council', 'Party Candidate ' || row_number() OVER (), (ARRAY['Aurora Party','Civic Union','Forward Coalition'])[1 + (row_number() OVER ()::int % 3)] FROM citizens WHERE NOT EXISTS (SELECT 1 FROM candidates WHERE election_id = $1 AND citizen_id = citizens.uuid AND status = 'active') LIMIT 18").bind(election_uuid).execute(&state.pool).await,
+        "test-independents" => sqlx::query("INSERT INTO candidates (election_id, citizen_id, position, election_display_name, party) SELECT $1, citizens.uuid, 'council', 'Independent ' || row_number() OVER (), 'Independent' FROM citizens WHERE NOT EXISTS (SELECT 1 FROM candidates WHERE election_id = $1 AND citizen_id = citizens.uuid AND status = 'active') LIMIT 6").bind(election_uuid).execute(&state.pool).await,
+        "test-positions" => sqlx::query("INSERT INTO candidates (election_id, citizen_id, position, election_display_name, party) SELECT $1, citizens.uuid, positions.position, 'Test ' || positions.position::text || ' ' || row_number() OVER (), 'Civic Union' FROM election_positions positions CROSS JOIN LATERAL (SELECT uuid FROM citizens WHERE NOT EXISTS (SELECT 1 FROM candidates WHERE election_id = $1 AND citizen_id = citizens.uuid AND status = 'active') ORDER BY random() LIMIT 3) citizens WHERE positions.election_id = $1 AND positions.position NOT IN ('president','vice_president','council') ON CONFLICT DO NOTHING").bind(election_uuid).execute(&state.pool).await,
         _ => return bad_request("Unknown debug action."),
     };
     match result {
@@ -588,7 +676,8 @@ pub async fn post_manage_council_candidate(
     let candidate = sqlx::query(
         "SELECT candidates.election_display_name, candidates.party, candidates.status::text AS status
          FROM candidates JOIN elections ON elections.uuid = candidates.election_id
-         WHERE elections.uuid = $1 AND candidates.uuid = $2 AND candidates.position NOT IN ('president', 'vice_president')
+         WHERE elections.uuid = $1 AND elections.active_revote_id IS NULL
+           AND candidates.uuid = $2 AND candidates.position NOT IN ('president', 'vice_president')
          FOR UPDATE OF candidates",
     )
     .bind(election_uuid)
@@ -679,7 +768,8 @@ pub async fn post_manage_presidential_ticket(
          JOIN elections ON elections.uuid = presidential_tickets.election_id
          JOIN candidates president ON president.uuid = presidential_tickets.president_candidate_id
          JOIN candidates vice_president ON vice_president.uuid = presidential_tickets.vice_president_candidate_id
-         WHERE elections.uuid = $1 AND presidential_tickets.uuid = $2
+         WHERE elections.uuid = $1 AND elections.active_revote_id IS NULL
+           AND presidential_tickets.uuid = $2
          FOR UPDATE OF presidential_tickets, president, vice_president",
     )
     .bind(election_uuid)

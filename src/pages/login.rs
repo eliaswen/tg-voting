@@ -103,12 +103,6 @@ struct DeviceLoginPage<'a> {
 }
 
 #[derive(Template)]
-#[template(path = "login/oauth-callback.html")]
-struct OauthCallbackPage {
-    request_id: uuid::Uuid,
-}
-
-#[derive(Template)]
 #[template(path = "login/manual-check.html")]
 struct ManualCheckPage {
     request_id: uuid::Uuid,
@@ -325,49 +319,26 @@ pub async fn get_login_oauth_callback(
     trace!(%request_id, "Spawning OAuth callback completion task");
     tokio::spawn(handle_oauth_callback(state.clone(), request_id, code));
 
-    render_template_page(
-        &OauthCallbackPage { request_id },
-        "Signing in",
-        jar,
-        &state.pool,
-    )
-    .await
+    render_template_page(&OauthCallbackPage { request_id }, "Signing in", jar, &state.pool).await
 }
 
 pub async fn get_login_oauth_status(
     State(state): State<AppState>,
     Path(request_id): Path<uuid::Uuid>,
 ) -> Sse<impl Stream<Item = Result<Event, BoxError>>> {
-    trace!(%request_id, "Opening OAuth status event stream");
     let stream = stream::once(async move {
         loop {
-            let status = state
-                .pending_logins
-                .lock()
-                .unwrap()
-                .get(&request_id)
-                .map(|login| login.status.clone());
-
+            let status = {
+                state.pending_logins.lock().unwrap().get(&request_id).map(|login| login.status.clone())
+            };
             match status {
                 Some(PendingLoginStatus::Pending) => sleep(Duration::from_millis(250)).await,
-                Some(PendingLoginStatus::Complete(_)) => {
-                    debug!(%request_id, "OAuth status event stream observed completed login");
-                    return Ok(Event::default()
-                        .event("redirect")
-                        .data(format!("/login/oauth/complete/{request_id}")));
-                }
-                Some(PendingLoginStatus::Failed(error)) => {
-                    warn!(%request_id, error_code = %error, "OAuth status event stream observed failed login");
-                    return Ok(Event::default().event("error").data(error));
-                }
-                None => {
-                    warn!(%request_id, "OAuth status event stream lost pending login");
-                    return Ok(Event::default().event("error").data("session-error"));
-                }
+                Some(PendingLoginStatus::Complete(_)) => return Ok(Event::default().event("redirect").data(format!("/login/oauth/complete/{request_id}"))),
+                Some(PendingLoginStatus::Failed(error)) => return Ok(Event::default().event("error").data(error)),
+                None => return Ok(Event::default().event("error").data("session-error")),
             }
         }
     });
-
     Sse::new(stream).keep_alive(KeepAlive::default())
 }
 
@@ -393,8 +364,7 @@ pub async fn get_login_oauth_manual_check(
                 jar,
                 &state.pool,
             )
-            .await
-            .into_response()
+            .await.into_response()
         }
         Some(PendingLoginStatus::Complete(_)) => {
             debug!(%request_id, "Manual OAuth status check observed completed login");
@@ -697,4 +667,9 @@ mod tests {
         assert_eq!(device.device_type, "Mobile");
         assert_eq!(device.device_name, "Safari on iOS");
     }
+}
+#[derive(Template)]
+#[template(path = "login/oauth-callback.html")]
+struct OauthCallbackPage {
+    request_id: uuid::Uuid,
 }

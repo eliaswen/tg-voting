@@ -1,0 +1,64 @@
+<section class="page manage-page result-review-page">
+<h1>Review results: {{ election_name }}</h1>
+<p>Automatic outcomes remain private until every contest has been reviewed and the election is certified.</p>
+{% for result in results %}
+<section>
+<h2>{{ result.contest }}</h2>
+<p>State: {{ result.status }}{% if result.reviewed %}; reviewed{% else %}; awaiting review{% endif %}</p>
+<table><thead><tr><th>Option</th><th>Votes</th><th>Automatic outcome</th></tr></thead><tbody>
+{% for candidate in result.candidates %}<tr><td>{{ candidate.name }}</td><td>{{ candidate.votes }}</td><td>{% if candidate.selected %}Elected{% else if candidate.tied %}Tied{% else %}Not elected{% endif %}</td></tr>{% endfor %}
+</tbody></table>
+<details><summary>Automatic count audit</summary><pre>{{ result.details }}</pre></details>
+{% if result.status == "review" && result.contest == "president" %}
+<form method="post" action="/manage/elections/{{ election_uuid }}/results">
+<input type="hidden" name="contest" value="president"><input type="hidden" name="action" value="eliminate">
+<label>Eliminate tied ticket <select name="candidate_id">{% for candidate in result.candidates %}{% if candidate.tied %}<option value="{{ candidate.id }}">{{ candidate.name }}</option>{% endif %}{% endfor %}</select></label>
+<label>Reason <input name="reason" required></label><button type="submit">Eliminate and recount</button>
+</form>
+{% endif %}
+{% if result.status == "provisional" && !result.reviewed %}
+<form method="post" action="/manage/elections/{{ election_uuid }}/results">
+<input type="hidden" name="contest" value="{{ result.contest }}"><input type="hidden" name="action" value="accept">
+<label>Review reason <input name="reason" required></label><button type="submit">Accept automatic outcome</button>
+</form>
+{% endif %}
+{% if !result.reviewed %}
+<form method="post" action="/manage/elections/{{ election_uuid }}/results">
+<input type="hidden" name="contest" value="{{ result.contest }}"><input type="hidden" name="action" value="override">
+{% if result.contest == "council" %}<fieldset><legend>Final council members</legend>{% for candidate in result.candidates %}<label><input type="checkbox" name="candidate_id" value="{{ candidate.id }}"{% if candidate.selected %} checked{% endif %}> {{ candidate.name }}</label>{% endfor %}</fieldset>
+{% else %}<label>Final option <select name="candidate_id">{% for candidate in result.candidates %}<option value="{{ candidate.id }}"{% if candidate.selected %} selected{% endif %}>{{ candidate.name }}</option>{% endfor %}</select></label>{% endif %}
+<label>Override reason <input name="reason" required></label><button type="submit">Record reviewed outcome</button>
+</form>
+{% endif %}
+</section>
+{% endfor %}
+
+<section><h2>Call a frozen-candidate revote</h2>
+<p>The current candidate set will be frozen. A runoff is limited to the recorded tied options.</p>
+<form method="post" action="/manage/elections/{{ election_uuid }}/revote">
+<label>Mode <select name="mode"><option value="all_contests">All contests</option><option value="selected_contest">Selected contest</option><option value="runoff">Runoff</option></select></label>
+<label>Contest for selected-contest or runoff mode <select name="contest"><option value="">None</option>{% for result in results %}<option value="{{ result.contest }}">{{ result.contest }}</option>{% endfor %}</select></label>
+<label>Voter-code issuance starts <input type="datetime-local" name="code_issuance_starts_at" required></label>
+<label>Voting starts <input type="datetime-local" name="voting_starts_at" required></label>
+<label>Voting ends <input type="datetime-local" name="voting_ends_at" required></label>
+<label>Reason <input name="reason" required></label><button type="submit">Record revote</button>
+</form></section>
+
+<section><h2>Full restart</h2>
+<p><strong>This permanently deletes every ballot, receipt, result, audit action, voter code, eligibility snapshot, candidacy, ticket, and revote for this election.</strong></p>
+<form method="post" action="/manage/elections/{{ election_uuid }}/revote">
+<input type="hidden" name="mode" value="full_restart">
+<label>Registration starts <input type="datetime-local" name="registration_starts_at" required></label>
+<label>Registration ends <input type="datetime-local" name="registration_ends_at" required></label>
+<label>Voting starts <input type="datetime-local" name="voting_starts_at" required></label>
+<label>Voting ends <input type="datetime-local" name="voting_ends_at" required></label>
+<label>Reason <input name="reason" required></label>
+<label>Type DELETE to confirm <input name="confirm_delete" pattern="DELETE" required></label>
+<button type="submit">Permanently restart election</button>
+</form></section>
+
+<section><h2>Historical count rounds</h2><p>Ordinary revotes retain historical rounds for audit.</p>
+{% for round in history %}<details><summary>{{ round.contest }} round {{ round.round }} — {{ round.status }} ({{ round.revote }})</summary><pre>{{ round.details }}</pre></details>{% endfor %}
+</section>
+<p><a href="/manage/elections/{{ election_uuid }}/status">Back to status</a></p>
+</section>

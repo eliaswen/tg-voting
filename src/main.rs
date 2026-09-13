@@ -1,10 +1,15 @@
 mod backend;
+mod counting;
+mod csrf;
+mod election_results;
 mod version;
 use axum::{
     Router,
+    body::{Body, to_bytes},
     extract::Request,
+    http::{Method, StatusCode, header},
     middleware::{self, Next},
-    response::Response,
+    response::{IntoResponse, Response},
     routing::get,
     routing::post,
 };
@@ -26,18 +31,21 @@ use pages::{
     get_about, get_account_appearance, get_account_overview, get_account_sessions,
     get_account_social, get_candidate_registration, get_census, get_census_month, get_contact,
     get_debug, get_discord_callback, get_discord_link, get_edit_election, get_election,
-    get_election_candidates, get_election_changes, get_elections, get_homepage,
+    get_election_candidates, get_election_changes, get_elections, get_homepage, get_issues,
     get_list_themes_page, get_login, get_login_oauth, get_login_oauth_callback,
     get_login_oauth_complete, get_login_oauth_device, get_login_oauth_manual_check,
-    get_login_oauth_status, get_logout, get_manage_election, get_manage_election_candidates,
+    get_login_oauth_status, get_logout,
+    get_manage_election, get_manage_election_candidates,
     get_manage_election_status, get_manage_elections, get_management, get_new_election,
-    get_reddit_link, get_settings, get_staging, get_userinfo, get_vote, get_voter_code,
+    get_receipts, get_results,
+    get_result_review, post_result_review, post_revote,
+    get_reddit_link, get_settings, get_staging, get_user, get_userinfo, get_vote, get_voter_code,
     login_threads, post_account_role, post_account_theme, post_activate_census,
     post_candidate_registration, post_complete_vote, post_create_census, post_debug,
     post_delete_account_session, post_delete_all_account_sessions, post_discord_unlink,
     post_edit_election, post_election_status, post_manage_council_candidate, post_manage_elections,
     post_manage_presidential_ticket, post_reddit_unlink, post_settings, post_timezone,
-    post_update_census_citizen, post_vote, post_voter_code, post_withdraw_candidate, get_issues
+    post_update_census_citizen, post_vote, post_voter_code, post_withdraw_candidate,
 };
 
 #[tokio::main]
@@ -194,8 +202,13 @@ async fn build_router(state: AppState) -> Router {
     let mut router = Router::new()
         .route("/", get(get_homepage))
         .route("/about", get(get_about))
+        .route("/health/live", get(|| async { "ok" }))
+        .route("/health/ready", get(health_ready))
         .route("/elections", get(get_elections))
         .route("/elections/{election_uuid}", get(get_election))
+        .route("/elections/{election_uuid}/results", get(get_results))
+        .route("/elections/{election_uuid}/receipts", get(get_receipts))
+        .route("/users/{user_uuid}", get(get_user))
         .route(
             "/elections/{election_uuid}/voter-code",
             get(get_voter_code).post(post_voter_code),
@@ -212,10 +225,7 @@ async fn build_router(state: AppState) -> Router {
         .route("/login/oauth", get(get_login_oauth))
         .route("/login/oauth/device", get(get_login_oauth_device))
         .route("/login/oauth/callback", get(get_login_oauth_callback))
-        .route(
-            "/login/oauth/status/{request_id}",
-            get(get_login_oauth_status),
-        )
+        .route("/login/oauth/status/{request_id}", get(get_login_oauth_status))
         .route(
             "/login/oauth/manual-check/{request_id}",
             get(get_login_oauth_manual_check),
@@ -255,6 +265,8 @@ async fn build_router(state: AppState) -> Router {
             get(get_manage_election),
         )
         .route("/manage", get(get_management))
+        .route("/manage/elections/{election_uuid}/results", get(get_result_review).post(post_result_review))
+        .route("/manage/elections/{election_uuid}/revote", post(post_revote))
         .route(
             "/manage/elections/{election_uuid}/edit",
             get(get_edit_election).post(post_edit_election),
@@ -306,15 +318,16 @@ async fn build_router(state: AppState) -> Router {
             "/manage/census/{census_uuid}/citizens/{citizen_uuid}",
             post(post_update_census_citizen),
         )
-        .route("/issues", get(get_issues))
-        .method_not_allowed_fallback(error_method)
-        .fallback(error_not_found)
-        .layer(middleware::from_fn(log_request));
-
+        .route("/issues", get(get_issues));
     if state.app_mode == 0 {
         trace!("Adding debug routes for development mode");
-        router = router.route("/debug/{path}", get(get_debug).post(post_debug))
+        router = router.route("/debug/{path}", get(get_debug).post(post_debug));
     }
+    router = router
+        .method_not_allowed_fallback(error_method)
+        .fallback(error_not_found)
+        .layer(middleware::from_fn_with_state(state.clone(), csrf_protection))
+        .layer(middleware::from_fn(log_request));
 
     router.with_state(state)
 }
@@ -328,6 +341,45 @@ async fn log_request(request: Request, next: Next) -> Response {
     let status = response.status();
     info!(%method, %path, %status, elapsed_ms = started_at.elapsed().as_millis(), "Request completed");
     response
+}
+
+async fn csrf_protection(axum::extract::State(state): axum::extract::State<AppState>, request: Request, next: Next) -> Response {
+    if request.uri().path().starts_with("/health/") {
+        return next.run(request).await;
+    }
+    let csrf = request.headers().get(header::COOKIE).and_then(|value| value.to_str().ok())
+        .and_then(|cookies| cookies.split(';').map(str::trim).find_map(|part| part.strip_prefix("csrf=")))
+        .map(str::to_owned);
+    let unsafe_method = !matches!(*request.method(), Method::GET | Method::HEAD | Method::OPTIONS);
+    if unsafe_method {
+        let Some(expected) = csrf.as_deref() else { return StatusCode::FORBIDDEN.into_response(); };
+        if !crate::csrf::valid_token(expected, &state.oauth_client_secret) { return StatusCode::FORBIDDEN.into_response(); }
+        let (parts, body) = request.into_parts();
+        let body = match to_bytes(body, 1024 * 1024).await { Ok(body) => body, Err(_) => return StatusCode::PAYLOAD_TOO_LARGE.into_response() };
+        if !crate::csrf::form_token_is_valid(&body, expected) { return StatusCode::FORBIDDEN.into_response(); }
+        return next.run(Request::from_parts(parts, Body::from(body))).await;
+    }
+    let valid_cookie = csrf.as_deref().is_some_and(|token| crate::csrf::valid_token(token, &state.oauth_client_secret));
+    if !valid_cookie && matches!(*request.method(), Method::GET | Method::HEAD) {
+        let location = request.uri().to_string();
+        let token = crate::csrf::new_token(&state.oauth_client_secret);
+        let secure = if state.public_host.starts_with("https://") { "; Secure" } else { "" };
+        return (
+            [(header::SET_COOKIE, format!("csrf={token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=28800{secure}")), (header::LOCATION, location)],
+            StatusCode::SEE_OTHER,
+        ).into_response();
+    }
+    next.run(request).await
+}
+
+async fn health_ready(axum::extract::State(state): axum::extract::State<AppState>) -> Response {
+    match sqlx::query_scalar::<_, i32>("SELECT 1").fetch_one(&state.pool).await {
+        Ok(_) => "ok".into_response(),
+        Err(error) => {
+            error!(?error, "Readiness database check failed");
+            axum::http::StatusCode::SERVICE_UNAVAILABLE.into_response()
+        }
+    }
 }
 
 fn get_database_url() -> Result<String, Box<dyn std::error::Error>> {

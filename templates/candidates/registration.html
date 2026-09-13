@@ -21,7 +21,8 @@
 <label id="candidate-display-name-label" class="form-label" for="candidate-display-name-input">Your election display name</label> <input id="candidate-display-name-input" class="form-control text-input" type="text" name="election_display_name" value="{{ page.display_name }}" required>
 </p>
         <p id="candidate-party-field" class="form-field candidate-field">
-<label id="candidate-party-label" class="form-label" for="candidate-party-input">Your party</label> <input id="candidate-party-input" class="form-control text-input" type="text" name="party" value="{{ page.party }}" required>
+<label id="candidate-party-label" class="form-label" for="candidate-party-input">Your party</label> <select id="candidate-party-input" class="form-control" name="party" required><option value="Independent"{% if page.party == "Independent" %} selected{% endif %}>Independent</option>{% for party in parties %}<option value="{{ party }}"{% if page.party == *party %} selected{% endif %}>{{ party }}</option>{% endfor %}<option value="__new__">Create a new party…</option></select>
+<label for="candidate-new-party-input">New party name (only when creating one)</label> <input id="candidate-new-party-input" class="form-control text-input" type="text" name="new_party">
 </p>
         <fieldset id="presidential-ticket-fields" class="form-fieldset ticket-fieldset"{% if !presidential %} hidden{% endif %}>
             <legend id="presidential-ticket-legend" class="fieldset-legend ticket-legend">Presidential ticket fields</legend>
@@ -34,7 +35,8 @@
 <label id="vice-president-name-label" class="form-label" for="vice-president-name-input">Vice president election display name</label> <input id="vice-president-name-input" class="form-control text-input" type="text" name="vice_president_display_name" value="{{ page.vice_president_name }}">
 </p>
             <p id="vice-president-party-field" class="form-field candidate-field">
-<label id="vice-president-party-label" class="form-label" for="vice-president-party-input">Vice president party</label> <input id="vice-president-party-input" class="form-control text-input" type="text" name="vice_president_party" value="{{ page.vice_president_party }}">
+<label id="vice-president-party-label" class="form-label" for="vice-president-party-input">Vice president party</label> <select id="vice-president-party-input" class="form-control" name="vice_president_party"><option value="Independent"{% if page.vice_president_party == "Independent" %} selected{% endif %}>Independent</option>{% for party in parties %}<option value="{{ party }}"{% if page.vice_president_party == *party %} selected{% endif %}>{{ party }}</option>{% endfor %}<option value="__new__">Create a new party…</option></select>
+<label for="vice-president-new-party-input">New vice-president party name</label> <input id="vice-president-new-party-input" class="form-control text-input" type="text" name="new_vice_president_party">
 </p>
             <div id="ticket-message-fields" class="form-fields message-fields">{% for message in page.messages %}<p id="ticket-message-field" class="form-field message-field">
 <label id="ticket-message-label" class="form-label">Message {{ loop.index }} <input id="ticket-message-input" class="form-control text-input message-input" type="text" name="message_{{ loop.index }}" maxlength="100" value="{{ message }}">

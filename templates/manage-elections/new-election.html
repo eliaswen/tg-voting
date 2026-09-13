@@ -23,9 +23,6 @@
 <label><input type="checkbox" name="president" value="president"{% if form.president.is_some() %} checked{% endif %}> President</label><br>
 <label><input type="checkbox" name="council" value="council"{% if form.council.is_some() %} checked{% endif %}> Council</label><br>
 <label><input type="checkbox" name="ombudsman" value="ombudsman"{% if form.ombudsman.is_some() %} checked{% endif %}> Ombudsman</label><br>
-<label><input type="checkbox" name="moderator" value="moderator"{% if form.moderator.is_some() %} checked{% endif %}> Moderator</label><br>
-<label><input type="checkbox" name="moderator_placeholder_1" value="moderator_placeholder_1"{% if form.moderator_placeholder_1.is_some() %} checked{% endif %}> moderator placeholder 1</label><br>
-<label><input type="checkbox" name="moderator_placeholder_2" value="moderator_placeholder_2"{% if form.moderator_placeholder_2.is_some() %} checked{% endif %}> moderator placeholder 2</label>
 </fieldset>
 <p id="registration-start-field" class="form-field election-field">
 <label id="registration-start-label" class="form-label" for="registration-start-input">Registration starts</label> <input id="registration-start-input" class="form-control datetime-input" type="datetime-local" name="registration_starts_at" value="{{ form.registration_starts_at }}">
@@ -39,9 +36,7 @@
 <p id="voting-end-field" class="form-field election-field">
 <label id="voting-end-label" class="form-label" for="voting-end-input">Voting ends</label> <input id="voting-end-input" class="form-control datetime-input" type="datetime-local" name="voting_ends_at" value="{{ form.voting_ends_at }}">
 </p>
-<p id="maximum-council-choices-field" class="form-field election-field">
-<label id="maximum-council-choices-label" class="form-label" for="maximum-council-choices-input">Maximum council choices</label> <input id="maximum-council-choices-input" class="form-control number-input" type="number" name="maximum_council_choices" min="1" value="{{ form.maximum_council_choices }}" required>
-</p>
+<p class="form-field election-field"><label for="council-seats-input">Council seats</label> <input id="council-seats-input" type="number" name="council_seats" min="1" value="{{ form.council_seats }}" required></p>
 <p id="new-election-submit-field" class="form-field submit-field"><button id="create-election-submit" class="form-button submit-button" type="submit">Create election</button></p>
 </form>
 </section>

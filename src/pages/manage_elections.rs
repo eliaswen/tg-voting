@@ -28,17 +28,11 @@ pub struct ElectionForm {
     council: Option<String>,
     #[serde(default)]
     ombudsman: Option<String>,
-    #[serde(default)]
-    moderator: Option<String>,
-    #[serde(default)]
-    moderator_placeholder_1: Option<String>,
-    #[serde(default)]
-    moderator_placeholder_2: Option<String>,
     registration_starts_at: String,
     registration_ends_at: String,
     voting_starts_at: String,
     voting_ends_at: String,
-    maximum_council_choices: i32,
+    council_seats: i32,
     #[serde(default)]
     force_edit: bool,
 }
@@ -141,8 +135,7 @@ pub async fn get_manage_election(
                 COALESCE(to_char(registration_ends_at AT TIME ZONE 'Europe/Paris', 'YYYY-MM-DD HH24:MI') || ' Europe/Paris', 'Not set') AS registration_ends_at,
                 election_type::text AS election_type,
                 COALESCE(to_char(voting_starts_at AT TIME ZONE 'Europe/Paris', 'YYYY-MM-DD HH24:MI') || ' Europe/Paris', 'Not set') AS voting_starts_at,
-                COALESCE(to_char(voting_ends_at AT TIME ZONE 'Europe/Paris', 'YYYY-MM-DD HH24:MI') || ' Europe/Paris', 'Not set') AS voting_ends_at,
-                maximum_council_choices
+                COALESCE(to_char(voting_ends_at AT TIME ZONE 'Europe/Paris', 'YYYY-MM-DD HH24:MI') || ' Europe/Paris', 'Not set') AS voting_ends_at
          FROM elections WHERE uuid = $1".replace("Europe/Paris", &timezone);
     let election = match sqlx::query(sqlx::AssertSqlSafe(query.as_str()))
         .bind(election_uuid)
@@ -179,7 +172,6 @@ pub async fn get_manage_election(
         registration_ends_at: election.get("registration_ends_at"),
         voting_starts_at: election.get("voting_starts_at"),
         voting_ends_at: election.get("voting_ends_at"),
-        maximum_council_choices: election.get("maximum_council_choices"),
     };
     debug!(%election_uuid, "Rendering election management dashboard");
     render_template_page(&page, "Manage election", jar, &state.pool)
@@ -213,7 +205,7 @@ pub async fn post_manage_elections(
     let create_query = "INSERT INTO elections (
             season, name, description, election_type,
             registration_starts_at, registration_ends_at,
-            voting_starts_at, voting_ends_at, maximum_council_choices
+            voting_starts_at, voting_ends_at, council_seats
         ) VALUES (
             $1, $2, $3, $4::election_type,
             NULLIF($5, '')::timestamp AT TIME ZONE 'Europe/Paris', NULLIF($6, '')::timestamp AT TIME ZONE 'Europe/Paris',
@@ -228,7 +220,7 @@ pub async fn post_manage_elections(
         .bind(&form.registration_ends_at)
         .bind(&form.voting_starts_at)
         .bind(&form.voting_ends_at)
-        .bind(form.maximum_council_choices)
+        .bind(form.council_seats)
         .fetch_one(&mut *transaction)
         .await;
 
@@ -270,7 +262,7 @@ pub async fn get_edit_election(
                 election_type::text AS election_type, status::text AS status,
                 to_char(voting_starts_at AT TIME ZONE 'Europe/Paris', 'YYYY-MM-DD\"T\"HH24:MI') AS voting_starts_at,
                 to_char(voting_ends_at AT TIME ZONE 'Europe/Paris', 'YYYY-MM-DD\"T\"HH24:MI') AS voting_ends_at,
-                maximum_council_choices
+                council_seats
          FROM elections
          WHERE uuid = $1".replace("Europe/Paris", &timezone);
     let election = sqlx::query(sqlx::AssertSqlSafe(edit_query.as_str()))
@@ -299,18 +291,6 @@ pub async fn get_edit_election(
                     .iter()
                     .any(|position| position == "ombudsman")
                     .then(|| "ombudsman".to_string()),
-                moderator: positions
-                    .iter()
-                    .any(|position| position == "moderator")
-                    .then(|| "moderator".to_string()),
-                moderator_placeholder_1: positions
-                    .iter()
-                    .any(|position| position == "moderator_placeholder_1")
-                    .then(|| "moderator_placeholder_1".to_string()),
-                moderator_placeholder_2: positions
-                    .iter()
-                    .any(|position| position == "moderator_placeholder_2")
-                    .then(|| "moderator_placeholder_2".to_string()),
                 registration_starts_at: election
                     .get::<Option<String>, _>("registration_starts_at")
                     .unwrap_or_default(),
@@ -323,7 +303,7 @@ pub async fn get_edit_election(
                 voting_ends_at: election
                     .get::<Option<String>, _>("voting_ends_at")
                     .unwrap_or_default(),
-                maximum_council_choices: election.get("maximum_council_choices"),
+                council_seats: election.get("council_seats"),
                 force_edit: false,
             }
         }
@@ -385,7 +365,7 @@ pub async fn post_edit_election(
             registration_ends_at = NULLIF($6, '')::timestamp AT TIME ZONE 'Europe/Paris',
             voting_starts_at = NULLIF($7, '')::timestamp AT TIME ZONE 'Europe/Paris',
             voting_ends_at = NULLIF($8, '')::timestamp AT TIME ZONE 'Europe/Paris',
-            maximum_council_choices = $9
+            council_seats = $9
          WHERE uuid = $10"
         .replace("Europe/Paris", &timezone);
     let query = sqlx::query(sqlx::AssertSqlSafe(update_query.as_str()))
@@ -397,7 +377,7 @@ pub async fn post_edit_election(
         .bind(&form.registration_ends_at)
         .bind(&form.voting_starts_at)
         .bind(&form.voting_ends_at)
-        .bind(form.maximum_council_choices)
+        .bind(form.council_seats)
         .bind(election_uuid)
         .execute(&mut *transaction)
         .await;
@@ -433,7 +413,7 @@ pub async fn post_edit_election(
 fn validate_election(form: &ElectionForm) -> Result<(), &'static str> {
     trace!(
         season = form.season,
-        maximum_council_choices = form.maximum_council_choices,
+        council_seats = form.council_seats,
         "Validating election form"
     );
     if form.season <= 0 {
@@ -445,8 +425,8 @@ fn validate_election(form: &ElectionForm) -> Result<(), &'static str> {
     if form.description.trim().is_empty() {
         return Err("Description is required.");
     }
-    if form.maximum_council_choices <= 0 {
-        return Err("Maximum council choices must be greater than zero.");
+    if form.council.is_some() && form.council_seats <= 0 {
+        return Err("A council election must have at least one seat.");
     }
     let registration_starts_at = parse_date(&form.registration_starts_at)?;
     let registration_ends_at = parse_date(&form.registration_ends_at)?;
@@ -494,14 +474,11 @@ impl Default for ElectionForm {
             president: None,
             council: None,
             ombudsman: None,
-            moderator: None,
-            moderator_placeholder_1: None,
-            moderator_placeholder_2: None,
             registration_starts_at: String::new(),
             registration_ends_at: String::new(),
             voting_starts_at: String::new(),
             voting_ends_at: String::new(),
-            maximum_council_choices: 10,
+            council_seats: 10,
             force_edit: false,
         }
     }
@@ -513,15 +490,6 @@ impl ElectionForm {
             ("president", self.president.is_some()),
             ("council", self.council.is_some()),
             ("ombudsman", self.ombudsman.is_some()),
-            ("moderator", self.moderator.is_some()),
-            (
-                "moderator_placeholder_1",
-                self.moderator_placeholder_1.is_some(),
-            ),
-            (
-                "moderator_placeholder_2",
-                self.moderator_placeholder_2.is_some(),
-            ),
         ]
         .into_iter()
         .filter(|(_, selected)| *selected)
@@ -582,7 +550,6 @@ struct ElectionDashboardPage {
     registration_ends_at: String,
     voting_starts_at: String,
     voting_ends_at: String,
-    maximum_council_choices: i32,
 }
 
 async fn save_positions(
@@ -643,14 +610,11 @@ mod tests {
             president: None,
             council: Some("council".to_string()),
             ombudsman: None,
-            moderator: None,
-            moderator_placeholder_1: None,
-            moderator_placeholder_2: None,
             registration_starts_at: "2026-01-01T09:00".to_string(),
             registration_ends_at: "2026-01-02T09:00".to_string(),
             voting_starts_at: "2026-01-05T09:00".to_string(),
             voting_ends_at: "2026-01-06T09:00".to_string(),
-            maximum_council_choices: 10,
+            council_seats: 10,
             force_edit: false,
         }
     }
@@ -671,7 +635,7 @@ mod tests {
         assert!(validate_election(&form).is_err());
 
         let mut form = valid_form();
-        form.maximum_council_choices = 0;
+        form.council_seats = 0;
         assert!(validate_election(&form).is_err());
     }
 }

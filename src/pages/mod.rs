@@ -12,9 +12,12 @@ pub mod login;
 pub mod manage_election_status;
 pub mod manage_elections;
 pub mod management;
+pub mod results;
+pub mod result_review;
 pub mod settings;
 pub mod social_links;
 pub mod themes;
+pub mod users;
 pub mod voting;
 
 pub use crate::backend::tasks::login_threads;
@@ -37,7 +40,7 @@ pub use census::{
 pub use debug::{get_debug, post_debug};
 pub use elections::{get_election, get_elections};
 pub use homepage::get_homepage;
-pub use info::{get_about, get_contact, get_staging, get_issues};
+pub use info::{get_about, get_contact, get_issues, get_staging};
 pub use login::{
     get_login, get_login_oauth, get_login_oauth_callback, get_login_oauth_complete,
     get_login_oauth_device, get_login_oauth_manual_check, get_login_oauth_status, get_logout,
@@ -52,10 +55,13 @@ pub use manage_elections::{
     post_edit_election, post_manage_elections,
 };
 pub use management::get_management;
+pub use results::{get_receipts, get_results};
+pub use result_review::{get_result_review, post_result_review, post_revote};
 pub use settings::{get_settings, post_settings, post_timezone};
 pub use social_links::{
     get_discord_callback, get_discord_link, get_reddit_link, post_discord_unlink,
     post_reddit_unlink,
 };
 pub use themes::get_list_themes_page;
+pub use users::get_user;
 pub use voting::{get_vote, get_voter_code, post_complete_vote, post_vote, post_voter_code};

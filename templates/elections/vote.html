@@ -1,5 +1,23 @@
 <section id="vote-page" class="page elections-page vote-page">
 <h1 id="vote-title" class="page-title">Vote in {{ election_name }}</h1>
-{% if !receipt.is_empty() %}<p>Your vote is complete. Receipt number: <strong>{{ receipt }}</strong></p>{% else if confirming %}<p>Your voter code was accepted. Complete the placeholder vote below.</p><form method="post" action="/elections/{{ election_uuid }}/vote/complete"><input type="hidden" name="voting_code" value="{{ voting_code }}"><button type="submit">Complete vote</button></form>{% else %}<form method="post" action="/elections/{{ election_uuid }}/vote"><label for="voting-code-input">Voter code</label> <input id="voting-code-input" name="voting_code" pattern="[A-Za-z0-9]{4}-[A-Za-z0-9]{4}" required><button type="submit">Continue</button></form>{% if debug_bypass %}<form method="post" action="/elections/{{ election_uuid }}/vote"><input type="hidden" name="voting_code" value=""><button type="submit">Debug vote without voter code</button></form>{% endif %}{% endif %}
+{% if !receipt.is_empty() %}<p>Your vote is complete. Receipt number: <strong>{{ receipt }}</strong></p>{% else if confirming %}
+<p>Your voter code was accepted. Review and submit your ballot. Every contest is optional.</p>
+<form method="post" action="/elections/{{ election_uuid }}/vote/complete">
+<input type="hidden" name="voting_code" value="{{ voting_code }}">
+{% if !tickets.is_empty() %}<fieldset><legend>President and vice president</legend>
+<p>Rank tickets from 1 onward without gaps. Leave 0 to omit a ticket.</p>{% for ticket in tickets %}<p><input type="hidden" name="presidential_ticket" value="{{ ticket.uuid }}"><label><a href="/users/{{ ticket.president_uuid }}">{{ ticket.president_name }}</a> and <a href="/users/{{ ticket.vice_president_uuid }}">{{ ticket.vice_president_name }}</a> ({{ ticket.party }}): <input type="number" name="presidential_ranking" min="0" value="0"></label></p>{% endfor %}
+</fieldset>{% endif %}
+{% if !council_candidates.is_empty() %}<fieldset><legend>Council</legend>
+<p>Select up to {{ council_seats }} candidates, or explicitly abstain.</p>
+{% for candidate in council_candidates %}<p><label><input type="checkbox" name="council_candidate" value="{{ candidate.uuid }}"> <a href="/users/{{ candidate.user_uuid }}">{{ candidate.name }}</a> ({{ candidate.party }})</label></p>{% endfor %}
+<p><label><input type="checkbox" name="abstain_position" value="council"> Abstain from the council contest</label></p>
+</fieldset>{% endif %}
+{% for position in positions %}<fieldset><legend>{{ position.label }}</legend>
+{% for candidate in position.candidates %}<p><label><input type="radio" name="candidate_id" value="{{ candidate.uuid }}"> <a href="/users/{{ candidate.user_uuid }}">{{ candidate.name }}</a> ({{ candidate.party }})</label></p>{% endfor %}
+<p><label><input type="checkbox" name="abstain_position" value="{{ position.position }}"> Abstain from this contest</label></p>
+{% if position.candidates.is_empty() %}<p>No candidates are available.</p>{% endif %}
+</fieldset>{% endfor %}
+<button type="submit">Submit final ballot</button></form>
+{% else %}<form method="post" action="/elections/{{ election_uuid }}/vote"><label for="voting-code-input">Voter code</label> <input id="voting-code-input" name="voting_code" pattern="[A-Za-z0-9]{4}-[A-Za-z0-9]{4}" required><button type="submit">Continue</button></form>{% if debug_bypass %}<form method="post" action="/elections/{{ election_uuid }}/vote"><input type="hidden" name="voting_code" value=""><button type="submit">Debug vote without voter code</button></form>{% endif %}{% endif %}
 <nav><a href="/elections/{{ election_uuid }}">Back to election</a></nav>
 </section>

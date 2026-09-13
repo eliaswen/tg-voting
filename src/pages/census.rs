@@ -187,13 +187,8 @@ async fn render_census(
             for citizen in citizens {
                 let citizen_uuid: uuid::Uuid = citizen.get("uuid");
                 let status: String = citizen.get("census_status");
-                let citizen_identifier = citizen
-                    .try_get::<Option<String>, _>("citizen_id")
-                    .unwrap_or_default()
-                    .unwrap_or_default();
                 rows.push(CensusCitizen {
                     uuid: citizen_uuid,
-                    citizen_id: citizen_identifier,
                     oauth_username: display_value_raw(citizen.get("oauth_username")),
                     display_name: display_value_raw(citizen.get("display_name")),
                     discord_username: display_value_raw(citizen.get("discord_username")),
@@ -378,7 +373,7 @@ pub async fn post_update_census_citizen(
             return census_server_error();
         }
     };
-    let update = sqlx::query("UPDATE citizens SET citizen_id = $1 WHERE uuid = $2 RETURNING uuid")
+    let update = sqlx::query("UPDATE citizens SET citizen_id = COALESCE($1, citizen_id) WHERE uuid = $2 RETURNING uuid")
         .bind(citizen_identifier)
         .bind(citizen_uuid)
         .fetch_optional(&mut *transaction)
@@ -455,7 +450,6 @@ struct CensusDashboardPage<'a> {
 
 struct CensusCitizen {
     uuid: uuid::Uuid,
-    citizen_id: String,
     oauth_username: String,
     display_name: String,
     discord_username: String,

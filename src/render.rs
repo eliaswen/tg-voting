@@ -264,9 +264,10 @@ async fn render_page_context(
             if cookies.get("timezone").is_none() {
                 html.0 = html.0.replace(
                     "</body>",
-                    "<script>const form=document.createElement('form');form.method='post';form.action='/settings/timezone';const timezone=document.createElement('input');timezone.type='hidden';timezone.name='timezone';timezone.value=Intl.DateTimeFormat().resolvedOptions().timeZone||'UTC';const returnTo=document.createElement('input');returnTo.type='hidden';returnTo.name='return_to';returnTo.value=window.location.pathname+window.location.search;form.append(timezone,returnTo);document.body.append(form);form.submit()</script></body>",
+                    "<form id=\"timezone-detection-form\" method=\"post\" action=\"/settings/timezone\" hidden><input id=\"timezone-detection-value\" type=\"hidden\" name=\"timezone\"><input id=\"timezone-return-to\" type=\"hidden\" name=\"return_to\"></form><script>const form=document.getElementById('timezone-detection-form');document.getElementById('timezone-detection-value').value=Intl.DateTimeFormat().resolvedOptions().timeZone||'UTC';document.getElementById('timezone-return-to').value=window.location.pathname+window.location.search;form.submit()</script></body>",
                 );
             }
+            html.0 = crate::csrf::inject_post_tokens(&html.0, &cookies);
             trace!(page_title, "Finished rendering page");
             html
         }
@@ -324,5 +325,21 @@ mod tests {
             .0;
         assert!(visible.contains("href=\"/manage\""));
         assert!(!hidden.contains("href=\"/manage\""));
+    }
+
+    #[test]
+    fn authentik_display_data_is_contextually_escaped() {
+        let rendered = show_page_with_theme(
+            "Content",
+            "<title>",
+            1,
+            true,
+            Some("<img src=x onerror=alert(1)>".to_string()),
+            false,
+        )
+        .unwrap()
+        .0;
+        assert!(!rendered.contains("<img src=x onerror=alert(1)>"));
+        assert!(!rendered.contains("onerror=alert(1)>"));
     }
 }

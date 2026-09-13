@@ -1,12 +1,9 @@
 use chrono::{DateTime, Utc};
 
-pub const DIRECT_POSITIONS: [(&str, &str); 6] = [
+pub const DIRECT_POSITIONS: [(&str, &str); 3] = [
     ("president", "President"),
     ("council", "Council"),
     ("ombudsman", "Ombudsman"),
-    ("moderator", "Moderator"),
-    ("moderator_placeholder_1", "moderator placeholder 1"),
-    ("moderator_placeholder_2", "moderator placeholder 2"),
 ];
 
 pub fn position_label(position: &str) -> &'static str {
@@ -20,7 +17,6 @@ pub fn position_label(position: &str) -> &'static str {
 pub fn position_group(position: &str) -> Option<u8> {
     match position {
         "president" | "vice_president" | "council" | "ombudsman" => Some(1),
-        "moderator" | "moderator_placeholder_1" | "moderator_placeholder_2" => Some(2),
         _ => None,
     }
 }
@@ -154,6 +150,6 @@ mod tests {
     fn candidate_groups_are_separate() {
         assert_eq!(position_group("president"), Some(1));
         assert_eq!(position_group("ombudsman"), Some(1));
-        assert_eq!(position_group("moderator"), Some(2));
+        assert_eq!(position_group("moderator"), None);
     }
 }

@@ -30,6 +30,7 @@ async fn run_election_snapshots(state: AppState) {
             Ok(elections) => for election_uuid in elections { if crate::pages::voting::ensure_snapshot(&state, election_uuid).await.is_err() { error!(%election_uuid, "Failed to snapshot election eligibility"); } },
             Err(error) => error!(?error, "Failed to find elections requiring an eligibility snapshot"),
         }
+        crate::election_results::count_due_elections(&state).await;
         sleep(Duration::from_secs(30)).await;
     }
 }

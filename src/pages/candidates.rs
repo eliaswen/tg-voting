@@ -21,11 +21,15 @@ pub struct CandidateForm {
     election_display_name: String,
     party: String,
     #[serde(default)]
+    new_party: String,
+    #[serde(default)]
     vice_president_citizen_id: String,
     #[serde(default)]
     vice_president_display_name: String,
     #[serde(default)]
     vice_president_party: String,
+    #[serde(default)]
+    new_vice_president_party: String,
     #[serde(default)]
     message_1: String,
     #[serde(default)]
@@ -129,6 +133,7 @@ struct CandidateRegistrationTemplate<'a> {
     positions: &'a [RegistrationPosition],
     presidential: bool,
     debug_mode: bool,
+    parties: &'a [String],
 }
 
 struct RegistrationPosition {
@@ -138,17 +143,23 @@ struct RegistrationPosition {
 }
 
 struct PresidentialTicket {
+    president_uuid: uuid::Uuid,
     president_name: String,
     president_party: String,
     vice_president_name: String,
     vice_president_party: String,
+    vice_president_uuid: uuid::Uuid,
     messages: Vec<String>,
 }
 
 struct CouncilCandidate {
+    user_uuid: uuid::Uuid,
     name: String,
     party: String,
-    position: String,
+}
+struct CandidateGroup {
+    label: String,
+    candidates: Vec<CouncilCandidate>,
 }
 
 #[derive(Template)]
@@ -159,6 +170,9 @@ struct CandidatesPage<'a> {
     search_query: &'a str,
     presidential: &'a [PresidentialTicket],
     council: &'a [CouncilCandidate],
+    other_positions: &'a [CandidateGroup],
+    show_president: bool,
+    show_council: bool,
 }
 
 pub async fn get_candidate_registration(
@@ -188,11 +202,10 @@ pub async fn get_candidate_registration(
     }
     let eligible = sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM election_eligibility WHERE election_id = $1 AND citizen_id = $2)").bind(election_uuid).bind(citizen.uuid).fetch_one(&state.pool).await.unwrap_or(false);
     if registration_open && !eligible && state.app_mode != 0 {
-        return bad_request(
-            "You're not eligible to register for this election.",
-        );
+        return bad_request("You're not eligible to register for this election.");
     }
     let mut applicable = match sqlx::query_scalar::<_, String>("SELECT position::text FROM election_positions WHERE election_id = $1 AND position <> 'vice_president' ORDER BY position::text").bind(election_uuid).fetch_all(&state.pool).await { Ok(values) => values, Err(error) => return database_error(error) };
+    applicable.retain(|position| crate::pages::election_lifecycle::DIRECT_POSITIONS.iter().any(|(value, _)| *value == position));
     let active_positions = sqlx::query_scalar::<_, String>("SELECT position::text FROM candidates WHERE election_id = $1 AND citizen_id = $2 AND status = 'active'").bind(election_uuid).bind(citizen.uuid).fetch_all(&state.pool).await.unwrap_or_default();
     applicable.retain(|position| {
         let group = crate::pages::election_lifecycle::position_group(position);
@@ -358,6 +371,8 @@ pub async fn get_candidate_registration(
     }
 
     let position = page.position.as_deref().unwrap_or_default();
+    let parties = sqlx::query_scalar::<_, String>("SELECT DISTINCT party FROM candidates WHERE election_id = $1 AND status = 'active' ORDER BY party")
+        .bind(election_id).fetch_all(&state.pool).await.unwrap_or_default();
     let template = CandidateRegistrationTemplate {
         election_name: election.get("name"),
         election_uuid,
@@ -367,6 +382,7 @@ pub async fn get_candidate_registration(
         positions: &position_options,
         presidential: position == "president",
         debug_mode: state.app_mode == 0,
+        parties: &parties,
     };
     trace!(%election_uuid, citizen_id = citizen.id, show_form = page.show_form, show_status = page.show_status, "Rendering candidate registration page");
     render_template_page(&template, "Candidate registration", jar, &state.pool)
@@ -378,9 +394,11 @@ pub async fn post_candidate_registration(
     State(state): State<AppState>,
     jar: CookieJar,
     Path(election_uuid): Path<uuid::Uuid>,
-    Form(form): Form<CandidateForm>,
+    Form(mut form): Form<CandidateForm>,
 ) -> Response {
     trace!(%election_uuid, position = %form.position, "Handling candidate registration update");
+    if form.party == "__new__" { form.party = form.new_party.trim().to_string(); }
+    if form.vice_president_party == "__new__" { form.vice_president_party = form.new_vice_president_party.trim().to_string(); }
     let citizen = match require_citizen(&state, &jar).await {
         Ok(citizen) => citizen,
         Err(response) => return response,
@@ -399,7 +417,8 @@ pub async fn post_candidate_registration(
     };
     let election = sqlx::query(
         "SELECT uuid AS id, status::text AS status,
-                status = 'upcoming' AND CURRENT_TIMESTAMP >= registration_starts_at AND CURRENT_TIMESTAMP < registration_ends_at AS registration_open
+                active_revote_id IS NULL AND status = 'upcoming'
+                    AND CURRENT_TIMESTAMP >= registration_starts_at AND CURRENT_TIMESTAMP < registration_ends_at AS registration_open
          FROM elections WHERE uuid = $1 FOR UPDATE",
     )
     .bind(election_uuid)
@@ -418,6 +437,18 @@ pub async fn post_candidate_registration(
         Err(error) => return database_error(error),
     };
     let election_id: uuid::Uuid = election.get("id");
+    match sqlx::query_scalar::<_, String>("SELECT party FROM candidates WHERE election_id = $1 AND lower(trim(party)) = lower(trim($2)) ORDER BY database_created_at LIMIT 1")
+        .bind(election_id).bind(&form.party).fetch_optional(&mut *transaction).await {
+        Ok(Some(party)) => form.party = party,
+        Ok(None) => {}
+        Err(error) => return database_error(error),
+    }
+    match sqlx::query_scalar::<_, String>("SELECT party FROM candidates WHERE election_id = $1 AND lower(trim(party)) = lower(trim($2)) ORDER BY database_created_at LIMIT 1")
+        .bind(election_id).bind(&form.vice_president_party).fetch_optional(&mut *transaction).await {
+        Ok(Some(party)) => form.vice_president_party = party,
+        Ok(None) => {}
+        Err(error) => return database_error(error),
+    }
     let debug_bypass = state.app_mode == 0 && form.debug_census;
     if !debug_bypass {
         if let Err(response) = crate::pages::voting::ensure_snapshot(&state, election_uuid).await {
@@ -426,9 +457,7 @@ pub async fn post_candidate_registration(
     }
     let eligible = sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM election_eligibility WHERE election_id = $1 AND citizen_id = $2)").bind(election_uuid).bind(citizen.uuid).fetch_one(&mut *transaction).await.unwrap_or(false);
     if !eligible && !debug_bypass {
-        return bad_request(
-            "You're not eligible to register for this election.",
-        );
+        return bad_request("You're not eligible to register for this election.");
     }
     let applicable = sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM election_positions WHERE election_id = $1 AND position::text = $2)").bind(election_id).bind(&form.position).fetch_one(&mut *transaction).await.unwrap_or(false);
     if !applicable {
@@ -541,7 +570,8 @@ pub async fn post_withdraw_candidate(
         "SELECT candidates.uuid AS id, candidates.uuid, candidates.position::text AS position,
                 candidates.status::text AS status, elections.uuid AS election_id
          FROM candidates JOIN elections ON elections.uuid = candidates.election_id
-         WHERE elections.uuid = $1 AND candidates.citizen_id = $2 AND candidates.status = 'active'
+         WHERE elections.uuid = $1 AND elections.active_revote_id IS NULL
+         AND candidates.citizen_id = $2 AND candidates.status = 'active'
          AND CASE WHEN candidates.position IN ('president', 'vice_president', 'council', 'ombudsman') THEN 1 ELSE 2 END = $3
          FOR UPDATE OF candidates",
     )
@@ -655,10 +685,17 @@ pub async fn get_election_candidates(
         Err(error) => return database_error(error),
     };
     let election_id: uuid::Uuid = election.get("id");
+    let applicable = sqlx::query_scalar::<_, String>(
+        "SELECT position::text FROM election_positions WHERE election_id = $1",
+    )
+    .bind(election_id)
+    .fetch_all(&state.pool)
+    .await
+    .unwrap_or_default();
     let tickets = match sqlx::query(
         "SELECT presidential_tickets.uuid AS id,
-                president.election_display_name AS president_name, president.party AS president_party,
-                vice_president.election_display_name AS vice_president_name, vice_president.party AS vice_president_party
+                president.election_display_name AS president_name, president.party AS president_party, president.citizen_id AS president_uuid,
+                vice_president.election_display_name AS vice_president_name, vice_president.party AS vice_president_party, vice_president.citizen_id AS vice_president_uuid
          FROM presidential_tickets
          JOIN candidates president ON president.uuid = presidential_tickets.president_candidate_id
          JOIN candidates vice_president ON vice_president.uuid = presidential_tickets.vice_president_candidate_id
@@ -698,15 +735,17 @@ pub async fn get_election_candidates(
             .filter(|message| !message.is_empty())
             .collect();
         presidential.push(PresidentialTicket {
+            president_uuid: ticket.get("president_uuid"),
             president_name: ticket.get("president_name"),
             president_party: ticket.get("president_party"),
             vice_president_name: ticket.get("vice_president_name"),
             vice_president_party: ticket.get("vice_president_party"),
+            vice_president_uuid: ticket.get("vice_president_uuid"),
             messages,
         });
     }
     let council = match sqlx::query(
-        "SELECT election_display_name, party, position::text AS position FROM candidates
+        "SELECT citizen_id, election_display_name, party, position::text AS position FROM candidates
          WHERE election_id = $1 AND position NOT IN ('president', 'vice_president') AND status = 'active'
          ORDER BY position::text, election_display_name",
     )
@@ -721,6 +760,19 @@ pub async fn get_election_candidates(
         Err(error) => return database_error(error),
     };
     let mut council_items = Vec::new();
+    let mut other_positions: Vec<CandidateGroup> = applicable
+        .iter()
+        .filter(|position| {
+            !matches!(
+                position.as_str(),
+                "president" | "vice_president" | "council"
+            )
+        })
+        .map(|position| CandidateGroup {
+            label: crate::pages::election_lifecycle::position_label(position).to_string(),
+            candidates: Vec::new(),
+        })
+        .collect();
     for candidate in council {
         let searchable = format!(
             "{} {}",
@@ -731,14 +783,24 @@ pub async fn get_election_candidates(
         if !search_value.is_empty() && !searchable.contains(&search_value) {
             continue;
         }
-        council_items.push(CouncilCandidate {
+        let position: String = candidate.get("position");
+        let item = CouncilCandidate {
+            user_uuid: candidate.get("citizen_id"),
             name: candidate.get("election_display_name"),
             party: candidate.get("party"),
-            position: crate::pages::election_lifecycle::position_label(
-                &candidate.get::<String, _>("position"),
-            )
-            .to_string(),
-        });
+        };
+        if position == "council" {
+            council_items.push(item);
+        } else if let Some(group) = other_positions.iter_mut().find(|group| {
+            group.label == crate::pages::election_lifecycle::position_label(&position)
+        }) {
+            group.candidates.push(item);
+        } else {
+            other_positions.push(CandidateGroup {
+                label: crate::pages::election_lifecycle::position_label(&position).to_string(),
+                candidates: vec![item],
+            });
+        }
     }
     let page = CandidatesPage {
         election_name: election.get("name"),
@@ -746,6 +808,9 @@ pub async fn get_election_candidates(
         search_query: search.q.trim(),
         presidential: &presidential,
         council: &council_items,
+        other_positions: &other_positions,
+        show_president: applicable.iter().any(|position| position == "president"),
+        show_council: applicable.iter().any(|position| position == "council"),
     };
     trace!(%election_uuid, "Rendering public election candidates page");
     render_template_page(&page, "Candidates", jar, &state.pool)
@@ -760,7 +825,8 @@ async fn election_registration_state(
     trace!(%election_uuid, "Retrieving election registration state");
     sqlx::query(
         "SELECT uuid AS id, name, status::text AS status,
-                status = 'upcoming' AND CURRENT_TIMESTAMP >= registration_starts_at AND CURRENT_TIMESTAMP < registration_ends_at AS registration_open
+                active_revote_id IS NULL AND status = 'upcoming'
+                    AND CURRENT_TIMESTAMP >= registration_starts_at AND CURRENT_TIMESTAMP < registration_ends_at AS registration_open
          FROM elections WHERE uuid = $1",
     )
     .bind(election_uuid)
@@ -1196,9 +1262,11 @@ mod tests {
             position: position.to_string(),
             election_display_name: "Name".to_string(),
             party: "Party".to_string(),
+            new_party: String::new(),
             vice_president_citizen_id: "00000000-0000-0000-0000-000000000002".to_string(),
             vice_president_display_name: "VP".to_string(),
             vice_president_party: "VP Party".to_string(),
+            new_vice_president_party: String::new(),
             message_1: String::new(),
             message_2: String::new(),
             message_3: String::new(),

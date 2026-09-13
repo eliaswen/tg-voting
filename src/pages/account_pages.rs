@@ -27,7 +27,7 @@ pub async fn get_account_overview(State(state): State<AppState>, jar: CookieJar)
     };
     let account = match sqlx::query(
         "SELECT authentik_identities.preferred_username, authentik_identities.email,
-                authentik_identities.display_name, citizens.citizen_id, citizens.role
+                authentik_identities.display_name, citizens.role
          FROM citizens
          JOIN authentik_identities ON authentik_identities.citizen_id = citizens.uuid
          WHERE citizens.uuid = $1",
@@ -44,10 +44,6 @@ pub async fn get_account_overview(State(state): State<AppState>, jar: CookieJar)
         username: account.try_get("preferred_username").unwrap_or(""),
         email: account.try_get("email").unwrap_or(""),
         display_name: account.try_get("display_name").unwrap_or(""),
-        citizen_id: account
-            .try_get::<Option<String>, _>("citizen_id")
-            .unwrap_or_default()
-            .unwrap_or_else(|| "Not assigned".to_string()),
         current_role: account.get("role"),
         staging: state.app_mode != 2,
     };
@@ -196,7 +192,6 @@ struct AccountOverviewPage<'a> {
     username: &'a str,
     email: &'a str,
     display_name: &'a str,
-    citizen_id: String,
     current_role: i64,
     staging: bool,
 }
