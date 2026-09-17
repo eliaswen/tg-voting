@@ -2,21 +2,21 @@
     <h1 id="candidate-registration-title" class="page-title candidates-title">{{ election_name }} candidate registration</h1>
     <form method="get" action="/elections/{{ election_uuid }}/register"><label for="registration-position-select">Position</label> <select id="registration-position-select" name="position">{% for option in positions %}<option value="{{ option.value }}"{% if option.selected %} selected{% endif %}>{{ option.label }}</option>{% endfor %}</select><button type="submit">Select position</button></form>
 
-    <section id="candidate-registration-status" class="page-section registration-status-section"{% if !page.show_status %} hidden{% endif %}>
+    {% if page.show_status %}<section id="candidate-registration-status" class="page-section registration-status-section">
         <p id="candidate-registration-status-message" class="status-message registration-status-message">{{ page.status_message }}</p>
-    </section>
+    </section>{% endif %}
 
-    <form id="candidate-registration-form" class="candidate-form registration-form" method="post" action="/elections/{{ election_uuid }}/register"{% if !page.show_form %} hidden{% endif %}>
-        <p id="candidate-position-field" class="form-field candidate-field"{% if !page.show_form || page.position.is_some() %} hidden{% endif %}>
+    {% if page.show_form %}<form id="candidate-registration-form" class="candidate-form registration-form" method="post" action="/elections/{{ election_uuid }}/register">
+        {% if !(!page.show_form || page.position.is_some()) %}<p id="candidate-position-field" class="form-field candidate-field">
 <label id="candidate-position-label" class="form-label" for="candidate-position-select">Position</label> <select id="candidate-position-select" class="form-control position-select" name="position"{% if !page.show_form || page.position.is_some() %} disabled{% endif %}>
 <option id="candidate-position-president" class="select-option position-option" value="president">President</option>
 <option id="candidate-position-council" class="select-option position-option" value="council">Council</option>
 </select>
-</p>
-        <div id="candidate-fixed-position" class="form-field candidate-field"{% if !page.show_form || page.position.is_none() %} hidden{% endif %}>
+</p>{% endif %}
+        {% if !(!page.show_form || page.position.is_none()) %}<div id="candidate-fixed-position" class="form-field candidate-field">
 <input id="candidate-fixed-position-input" class="form-control hidden-input" type="hidden" name="position" value="{{ position }}"{% if !page.show_form || page.position.is_none() %} disabled{% endif %}>
 <p id="candidate-fixed-position-value" class="field-value position-value">Position: {{ position }}</p>
-</div>
+</div>{% endif %}
         <p id="candidate-display-name-field" class="form-field candidate-field">
 <label id="candidate-display-name-label" class="form-label" for="candidate-display-name-input">Your election display name</label> <input id="candidate-display-name-input" class="form-control text-input" type="text" name="election_display_name" value="{{ page.display_name }}" required>
 </p>
@@ -24,7 +24,7 @@
 <label id="candidate-party-label" class="form-label" for="candidate-party-input">Your party</label> <select id="candidate-party-input" class="form-control" name="party" required><option value="Independent"{% if page.party == "Independent" %} selected{% endif %}>Independent</option>{% for party in parties %}<option value="{{ party }}"{% if page.party == *party %} selected{% endif %}>{{ party }}</option>{% endfor %}<option value="__new__">Create a new party…</option></select>
 <label for="candidate-new-party-input">New party name (only when creating one)</label> <input id="candidate-new-party-input" class="form-control text-input" type="text" name="new_party">
 </p>
-        <fieldset id="presidential-ticket-fields" class="form-fieldset ticket-fieldset"{% if !presidential %} hidden{% endif %}>
+        {% if presidential %}<fieldset id="presidential-ticket-fields" class="form-fieldset ticket-fieldset">
             <legend id="presidential-ticket-legend" class="fieldset-legend ticket-legend">Presidential ticket fields</legend>
             <p id="presidential-ticket-description" class="field-description ticket-description">These fields are only used when registering for president.</p>
             <p id="vice-president-field" class="form-field candidate-field">
@@ -42,19 +42,19 @@
 <label id="ticket-message-label" class="form-label">Message {{ loop.index }} <input id="ticket-message-input" class="form-control text-input message-input" type="text" name="message_{{ loop.index }}" maxlength="100" value="{{ message }}">
 </label>
 </p>{% endfor %}</div>
-        </fieldset>
+        </fieldset>{% endif %}
         <button id="candidate-registration-submit" class="form-button submit-button" type="submit">Save registration</button>
         {% if debug_mode %}<button type="submit" name="debug_census" value="true">Debug save without census</button>{% endif %}
-    </form>
+    </form>{% endif %}
 
-    <form id="candidate-withdrawal-form" class="candidate-form withdrawal-form" method="post" action="/elections/{{ election_uuid }}/withdraw?position={{ position }}"{% if !page.show_withdrawal %} hidden{% endif %}>
+    {% if page.show_withdrawal %}<form id="candidate-withdrawal-form" class="candidate-form withdrawal-form" method="post" action="/elections/{{ election_uuid }}/withdraw?position={{ position }}">
 <button id="candidate-withdrawal-submit" class="form-button destructive-button withdrawal-button" type="submit">Withdraw candidacy</button>
-</form>
+</form>{% endif %}
 
     <nav id="candidate-registration-navigation" class="page-navigation candidates-navigation">
         <a id="candidate-registration-candidates-link" class="navigation-link candidates-link" href="/elections/{{ election_uuid }}/candidates">View candidates</a> |
         <a id="candidate-registration-elections-link" class="navigation-link elections-link" href="/elections">All elections</a>
-        <span id="candidate-registration-management-navigation" class="management-navigation"{% if !management_visible %} hidden{% endif %}>| <a id="candidate-registration-management-link" class="navigation-link management-link" href="/manage/elections/{{ election_uuid }}/status">Manage election status and candidates</a>
-</span>
+        {% if management_visible %}<span id="candidate-registration-management-navigation" class="management-navigation">| <a id="candidate-registration-management-link" class="navigation-link management-link" href="/manage/elections/{{ election_uuid }}/status">Manage election status and candidates</a>
+</span>{% endif %}
     </nav>
 </section>

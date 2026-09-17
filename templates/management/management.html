@@ -6,18 +6,18 @@
 
 <nav id="management-sections" class="management-sections management-navigation">
 <ul id="management-sections-list" class="item-list management-navigation-list">
-<li id="management-elections-item" class="item management-navigation-item elections-management-item"{% if !election_visible %} hidden{% endif %}>
+{% if election_visible %}<li id="management-elections-item" class="item management-navigation-item elections-management-item">
 <article id="management-elections-summary" class="management-summary elections-management-summary">
 <h2 id="management-elections-title" class="item-title management-item-title"><a id="management-elections-link" class="navigation-link management-link elections-management-link" href="/manage/elections">Elections</a></h2>
 <p id="management-elections-description" class="item-description management-item-description">Create election seasons, edit schedules, change election status, and review candidate registrations.</p>
 </article>
-</li>
-<li id="management-census-item" class="item management-navigation-item census-management-item"{% if !census_visible %} hidden{% endif %}>
+</li>{% endif %}
+{% if census_visible %}<li id="management-census-item" class="item management-navigation-item census-management-item">
 <article id="management-census-summary" class="management-summary census-management-summary">
 <h2 id="management-census-title" class="item-title management-item-title"><a id="management-census-link" class="navigation-link management-link census-management-link" href="/manage/census">Census</a></h2>
 <p id="management-census-description" class="item-description management-item-description">Create monthly censuses, update citizen IDs and statuses, and select the census currently in use.</p>
 </article>
-</li>
+</li>{% endif %}
 </ul>
 </nav>
 </section>

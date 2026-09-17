@@ -7,32 +7,32 @@
 <section id="account-discord" class="page-section account-section social-account-section discord-account-section">
 <h2 id="account-discord-title" class="section-title account-section-title">Discord</h2>
 <p id="account-discord-status" class="account-detail social-account-status">Username: <strong id="account-discord-username" class="social-username">{{ discord_username }}</strong></p>
-<div id="account-discord-connected" class="social-account-state social-account-connected"{% if !discord_connected %} hidden{% endif %}>
+{% if discord_connected %}<div id="account-discord-connected" class="social-account-state social-account-connected">
 <p id="account-discord-connected-description" class="account-description">This Discord account was verified through Discord OAuth2.</p>
 <form id="account-discord-unlink-form" class="account-form unlink-form" method="post" action="/account/discord/unlink">
 <button id="account-discord-unlink-button" class="form-button unlink-button" type="submit">Unlink Discord</button>
 </form>
-</div>
-<div id="account-discord-disconnected" class="social-account-state social-account-disconnected"{% if discord_connected %} hidden{% endif %}>
+</div>{% endif %}
+{% if !(discord_connected) %}<div id="account-discord-disconnected" class="social-account-state social-account-disconnected">
 <p id="account-discord-disconnected-description" class="account-description">No Discord account is linked.</p>
-<p id="account-discord-link-navigation" class="page-navigation"{% if discord_connected || !discord_available %} hidden{% endif %}><a id="account-discord-link" class="navigation-link" href="/account/discord/link">Link Discord account</a></p>
-<p id="account-discord-unavailable" class="status-message"{% if discord_available %} hidden{% endif %}>Discord linking is not configured on this server.</p>
-</div>
+{% if !(discord_connected || !discord_available) %}<p id="account-discord-link-navigation" class="page-navigation"><a id="account-discord-link" class="navigation-link" href="/account/discord/link">Link Discord account</a></p>{% endif %}
+{% if !(discord_available) %}<p id="account-discord-unavailable" class="status-message">Discord linking is not configured on this server.</p>{% endif %}
+</div>{% endif %}
 </section>
 
 <section id="account-reddit" class="page-section account-section social-account-section reddit-account-section">
 <h2 id="account-reddit-title" class="section-title account-section-title">Reddit</h2>
 <p id="account-reddit-wip" class="status-message"><strong>Work in progress</strong></p>
 <p id="account-reddit-status" class="account-detail social-account-status">Username: <strong id="account-reddit-username" class="social-username">{{ reddit_username }}</strong></p>
-<div id="account-reddit-connected" class="social-account-state social-account-connected"{% if !reddit_connected %} hidden{% endif %}>
+{% if reddit_connected %}<div id="account-reddit-connected" class="social-account-state social-account-connected">
 <form id="account-reddit-unlink-form" class="account-form unlink-form" method="post" action="/account/reddit/unlink">
 <button id="account-reddit-unlink-button" class="form-button unlink-button" type="submit">Unlink Reddit</button>
 </form>
-</div>
-<div id="account-reddit-disconnected" class="social-account-state social-account-disconnected"{% if reddit_connected %} hidden{% endif %}>
+</div>{% endif %}
+{% if !(reddit_connected) %}<div id="account-reddit-disconnected" class="social-account-state social-account-disconnected">
 <p id="account-reddit-description" class="account-description">Automatic Reddit verification is not available.</p>
 <p id="account-reddit-link-navigation" class="page-navigation"><a id="account-reddit-link" class="navigation-link" href="/account/reddit/link">See why</a></p>
-</div>
+</div>{% endif %}
 </section>
 
 <nav id="account-social-navigation" class="page-navigation account-navigation"><a id="account-social-back-link" class="navigation-link back-link" href="/account">Back to account</a></nav>

@@ -10,10 +10,10 @@
 <a id="account-sessions-search-clear" class="navigation-link clear-search-link" href="/account/sessions">Clear</a>
 </form>
 <section id="account-session-results" class="page-section account-section account-session-results">
-<p id="account-sessions-empty" class="empty-state sessions-empty"{% if !sessions.is_empty() %} hidden{% endif %}>No active sessions matched your search.</p>
+{% if sessions.is_empty() %}<p id="account-sessions-empty" class="empty-state sessions-empty">No active sessions matched your search.</p>{% endif %}
 <div id="account-session-list" class="account-session-list session-list">{% for session in sessions %}<article id="account-session" class="account-session session-item">
     <h3 id="account-session-name" class="session-name">{{ session.device_name }}</h3>
-    <p id="account-session-current" class="session-current"{% if !session.current %} hidden{% endif %}>Current session</p>
+    {% if session.current %}<p id="account-session-current" class="session-current">Current session</p>{% endif %}
     <dl id="account-session-details" class="session-details">
         <div id="account-session-type-detail" class="session-detail session-type-detail">
             <dt id="account-session-type-label" class="session-detail-label session-type-label">Device type</dt>

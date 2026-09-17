@@ -23,10 +23,10 @@
             <a id="election-overview-navigation-link" class="navigation-link election-link" href="/elections/{{ election.uuid }}">Overview</a> |
             <a id="election-candidates-link" class="navigation-link candidates-link" href="/elections/{{ election.uuid }}/candidates">Candidates</a> |
             <a id="election-changes-link" class="navigation-link changes-link" href="/elections/{{ election.uuid }}/changes">Change log</a>
-            <span id="election-registration-navigation" class="registration-navigation"{% if !election.registration_open %} hidden{% endif %}>| <a id="election-registration-link" class="navigation-link registration-link" href="/elections/{{ election.uuid }}/register">Register as a candidate</a>
-</span>
+            {% if election.registration_open %}<span id="election-registration-navigation" class="registration-navigation">| <a id="election-registration-link" class="navigation-link registration-link" href="/elections/{{ election.uuid }}/register">Register as a candidate</a>
+</span>{% endif %}
         </nav>
     </article>
-</li>{% endfor %}<li id="elections-empty" class="item empty-state elections-empty-state"{% if !elections.is_empty() %} hidden{% endif %}>No elections matched your search.</li>
+</li>{% endfor %}{% if elections.is_empty() %}<li id="elections-empty" class="item empty-state elections-empty-state">No elections matched your search.</li>{% endif %}
 </ol>
 </section>

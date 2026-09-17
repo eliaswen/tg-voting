@@ -23,7 +23,7 @@
         <p id="managed-election-action-{{ election.uuid }}" class="item-navigation election-navigation"><a id="managed-election-open-link-{{ election.uuid }}" class="navigation-link action-link" href="/manage/elections/{{ election.uuid }}">Open management dashboard</a></p>
     </article>
 </li>{% endfor %}
-            <li id="managed-elections-empty" class="item empty-state managed-elections-empty-state"{% if !elections.is_empty() %} hidden{% endif %}>No elections matched your search.</li>
+            {% if elections.is_empty() %}<li id="managed-elections-empty" class="item empty-state managed-elections-empty-state">No elections matched your search.</li>{% endif %}
         </ul>
     </section>
     <nav id="manage-elections-navigation" class="page-navigation manage-navigation"><a id="manage-elections-back-link" class="navigation-link back-link" href="/manage">Back to management</a></nav>

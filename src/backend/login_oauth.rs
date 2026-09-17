@@ -1,4 +1,7 @@
-use crate::pages::login::{AppState, PendingLoginStatus, SessionDevice};
+use crate::pages::login::{
+    AppState, PendingLoginStatus, SessionDevice, pending_login,
+    set_pending_login_status as persist_pending_login_status,
+};
 use chrono::{TimeDelta, Utc};
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
@@ -29,6 +32,24 @@ struct OAuthError {
     error: String,
 }
 
+#[derive(Debug, PartialEq, Eq)]
+enum DevicePollAction {
+    Continue,
+    SlowDown,
+    Expired,
+    Fail(&'static str),
+}
+
+fn device_poll_action(error: Option<&str>) -> DevicePollAction {
+    match error {
+        Some("authorization_pending") => DevicePollAction::Continue,
+        Some("slow_down") => DevicePollAction::SlowDown,
+        Some("expired_token") => DevicePollAction::Expired,
+        Some("access_denied") => DevicePollAction::Fail("oauth-access-denied"),
+        Some(_) | None => DevicePollAction::Fail("oauth-failure"),
+    }
+}
+
 #[derive(Deserialize)]
 struct OAuthUser {
     sub: String,
@@ -37,18 +58,13 @@ struct OAuthUser {
     name: Option<String>,
 }
 
-pub(crate) async fn handle_oauth_callback(state: AppState, request_id: uuid::Uuid, code: String) {
+pub(crate) async fn handle_oauth_callback(
+    state: AppState,
+    request_id: uuid::Uuid,
+    code: String,
+    device: SessionDevice,
+) {
     trace!(%request_id, "OAuth callback worker started");
-    let Some(device) = state
-        .pending_logins
-        .lock()
-        .unwrap()
-        .get(&request_id)
-        .map(|login| login.device.clone())
-    else {
-        warn!(%request_id, "OAuth callback worker could not find pending login");
-        return;
-    };
     debug!(%request_id, device_type = %device.device_type, device_name = %device.device_name, "Loaded pending OAuth callback context");
     let status = match complete_oauth_login(&state, &code, &device).await {
         Ok(session_token) => PendingLoginStatus::Complete(session_token),
@@ -58,12 +74,7 @@ pub(crate) async fn handle_oauth_callback(state: AppState, request_id: uuid::Uui
         }
     };
 
-    if let Some(login) = state.pending_logins.lock().unwrap().get_mut(&request_id) {
-        login.status = status;
-        debug!(%request_id, "Stored OAuth callback result");
-    } else {
-        warn!(%request_id, "Pending OAuth login disappeared before callback result could be stored");
-    }
+    set_pending_login_status(&state, request_id, status).await;
 }
 
 pub(crate) async fn complete_oauth_login(
@@ -142,15 +153,16 @@ pub(crate) async fn poll_device_login(
     expires_at: chrono::DateTime<Utc>,
 ) {
     debug!(%request_id, %expires_at, interval, "OAuth device polling worker started");
-    let Some(device) = state
-        .pending_logins
-        .lock()
-        .unwrap()
-        .get(&request_id)
-        .map(|login| login.device.clone())
-    else {
-        warn!(%request_id, "OAuth device polling worker could not find pending login");
-        return;
+    let device = match pending_login(&state, request_id).await {
+        Ok(Some(login)) => login.device,
+        Ok(None) => {
+            warn!(%request_id, "OAuth device polling worker could not find pending login");
+            return;
+        }
+        Err(error) => {
+            error!(?error, %request_id, "OAuth device polling worker could not load pending login");
+            return;
+        }
     };
     interval = interval.max(1);
     while Utc::now() < expires_at {
@@ -194,7 +206,7 @@ pub(crate) async fn poll_device_login(
                     PendingLoginStatus::Failed("oauth-failure".to_string())
                 }
             };
-            set_pending_login_status(&state, request_id, status);
+            set_pending_login_status(&state, request_id, status).await;
             return;
         }
         let error = response
@@ -202,43 +214,30 @@ pub(crate) async fn poll_device_login(
             .await
             .ok()
             .map(|error| error.error);
-        match error.as_deref() {
-            Some("authorization_pending") => {
+        match device_poll_action(error.as_deref()) {
+            DevicePollAction::Continue => {
                 trace!(%request_id, "OAuth device authorization is still pending");
             }
-            Some("slow_down") => {
+            DevicePollAction::SlowDown => {
                 interval = interval.saturating_add(5);
                 warn!(%request_id, interval, "OAuth provider requested slower device polling");
             }
-            Some("access_denied") => {
-                warn!(%request_id, "OAuth device authorization was denied");
-                set_pending_login_status(
-                    &state,
-                    request_id,
-                    PendingLoginStatus::Failed("oauth-access-denied".to_string()),
-                );
-                return;
-            }
-            Some("expired_token") => {
+            DevicePollAction::Expired => {
                 debug!(%request_id, "OAuth provider reported expired device code");
                 break;
             }
-            Some(error_code) => {
-                error!(%error_code, %request_id, "Device OAuth token request was rejected");
+            DevicePollAction::Fail(public_error) => {
+                if let Some(error_code) = error.as_deref() {
+                    warn!(%error_code, %request_id, "Device OAuth token request was rejected");
+                } else {
+                    error!(%request_id, "Device OAuth token request returned an invalid error response");
+                }
                 set_pending_login_status(
                     &state,
                     request_id,
-                    PendingLoginStatus::Failed("oauth-failure".to_string()),
-                );
-                return;
-            }
-            None => {
-                error!(%request_id, "Device OAuth token request returned an invalid error response");
-                set_pending_login_status(
-                    &state,
-                    request_id,
-                    PendingLoginStatus::Failed("oauth-failure".to_string()),
-                );
+                    PendingLoginStatus::Failed(public_error.to_string()),
+                )
+                .await;
                 return;
             }
         }
@@ -247,20 +246,55 @@ pub(crate) async fn poll_device_login(
         &state,
         request_id,
         PendingLoginStatus::Failed("oauth-expired".to_string()),
-    );
+    )
+    .await;
 }
 
-fn set_pending_login_status(state: &AppState, request_id: uuid::Uuid, status: PendingLoginStatus) {
+async fn set_pending_login_status(
+    state: &AppState,
+    request_id: uuid::Uuid,
+    status: PendingLoginStatus,
+) {
     let status_name = match &status {
         PendingLoginStatus::Pending => "pending",
         PendingLoginStatus::Complete(_) => "complete",
         PendingLoginStatus::Failed(_) => "failed",
     };
-    if let Some(login) = state.pending_logins.lock().unwrap().get_mut(&request_id) {
-        login.status = status;
-        debug!(%request_id, status = status_name, "Updated pending login status");
-    } else {
-        warn!(%request_id, status = status_name, "Could not update missing pending login status");
+    let completed_session_hash = match &status {
+        PendingLoginStatus::Complete(token) => Some(hash_token(token)),
+        _ => None,
+    };
+    match persist_pending_login_status(state, request_id, status).await {
+        Ok(true) => debug!(%request_id, status = status_name, "Updated pending login status"),
+        Ok(false) => {
+            warn!(%request_id, status = status_name, "Could not update missing pending login status");
+            revoke_unclaimed_session(state, request_id, completed_session_hash).await;
+        }
+        Err(error) => {
+            error!(?error, %request_id, status = status_name, "Could not persist pending login status");
+            revoke_unclaimed_session(state, request_id, completed_session_hash).await;
+        }
+    }
+}
+
+async fn revoke_unclaimed_session(
+    state: &AppState,
+    request_id: uuid::Uuid,
+    auth_code_hash: Option<Vec<u8>>,
+) {
+    let Some(auth_code_hash) = auth_code_hash else {
+        return;
+    };
+    match sqlx::query(
+        "UPDATE sessions SET revoked_at = CURRENT_TIMESTAMP
+         WHERE auth_code_hash = $1 AND revoked_at IS NULL",
+    )
+    .bind(auth_code_hash)
+    .execute(&state.pool)
+    .await
+    {
+        Ok(result) => warn!(%request_id, rows_affected = result.rows_affected(), "Revoked session whose pending login could not be stored"),
+        Err(error) => error!(?error, %request_id, "Could not revoke session whose pending login could not be stored"),
     }
 }
 
@@ -399,12 +433,11 @@ pub(crate) fn hash_token(token: &str) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::pages::login::PendingLogin;
     use axum::{Form, Router, http::StatusCode, response::IntoResponse, routing::post};
     use reqwest::Client;
     use sqlx::postgres::PgPoolOptions;
     use std::collections::HashMap;
-    use std::sync::{Arc, Mutex};
+    use tokio::sync::broadcast;
 
     async fn mock_provider() -> String {
         async fn device(Form(form): Form<HashMap<String, String>>) -> impl IntoResponse {
@@ -456,11 +489,12 @@ mod tests {
     }
 
     fn state(provider: &str) -> AppState {
+        let (login_updates, _) = broadcast::channel(16);
         AppState {
             pool: PgPoolOptions::new()
                 .connect_lazy("postgresql://localhost/test")
                 .unwrap(),
-            pending_logins: Arc::new(Mutex::new(HashMap::new())),
+            login_updates,
             oauth_client_id: "client".to_string(),
             oauth_client_secret: "secret".to_string(),
             oauth_authorize_url: format!("{provider}/authorize"),
@@ -489,44 +523,12 @@ mod tests {
         assert_eq!(authorization.interval, Some(1));
     }
 
-    #[tokio::test]
-    async fn device_login_reports_access_denied() {
-        let provider = mock_provider().await;
-        let state = state(&provider);
-        let request_id = uuid::Uuid::now_v7();
-        let expires_at = Utc::now() + TimeDelta::seconds(5);
-        state.pending_logins.lock().unwrap().insert(
-            request_id,
-            PendingLogin {
-                status: PendingLoginStatus::Pending,
-                created_at: Utc::now(),
-                expires_at,
-                device: SessionDevice {
-                    device_type: "Desktop".to_string(),
-                    device_name: "Test browser on Test OS".to_string(),
-                },
-            },
-        );
-
-        poll_device_login(
-            state.clone(),
-            request_id,
-            "device-code".to_string(),
-            1,
-            expires_at,
-        )
-        .await;
-
-        let status = state
-            .pending_logins
-            .lock()
-            .unwrap()
-            .get(&request_id)
-            .unwrap()
-            .status
-            .clone();
-        assert!(
-            matches!(status, PendingLoginStatus::Failed(error) if error == "oauth-access-denied")
+    #[test]
+    fn device_access_denial_has_a_specific_public_error() {
+        assert_eq!(
+            device_poll_action(Some("access_denied")),
+            DevicePollAction::Fail("oauth-access-denied")
         );
     }
+
 }

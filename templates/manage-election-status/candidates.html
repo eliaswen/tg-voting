@@ -30,7 +30,7 @@
 <button id="managed-ticket-submit" class="form-button submit-button" type="submit">Update ticket</button>
 </form>
 </article>{% endfor %}
-<p id="managed-presidential-tickets-empty" class="empty-state candidates-empty-state"{% if !presidential.is_empty() %} hidden{% endif %}>No presidential tickets are registered.</p>
+{% if presidential.is_empty() %}<p id="managed-presidential-tickets-empty" class="empty-state candidates-empty-state">No presidential tickets are registered.</p>{% endif %}
 </section>
 
 <section id="managed-council-section" class="page-section manage-section candidates-section managed-council-section">
@@ -48,7 +48,7 @@
 <button id="managed-council-submit" class="form-button submit-button" type="submit">Update candidate</button>
 </form>
 </article>{% endfor %}
-<p id="managed-council-candidates-empty" class="empty-state candidates-empty-state"{% if !council.is_empty() %} hidden{% endif %}>No council candidates are registered.</p>
+{% if council.is_empty() %}<p id="managed-council-candidates-empty" class="empty-state candidates-empty-state">No council candidates are registered.</p>{% endif %}
 </section>
 
 <section id="former-vice-presidents-section" class="page-section manage-section candidates-section former-vice-presidents-section">
@@ -60,7 +60,7 @@
 {% for candidate in former_vice_presidents %}<li id="former-vice-president-item" class="item candidate-item former-vice-president-item">
 <span id="former-vice-president-name" class="candidate-name">{{ candidate.name }}</span> (<span id="former-vice-president-party" class="candidate-party">{{ candidate.party }}</span>) - <span id="former-vice-president-status" class="candidate-status status-value">{{ candidate.status }}</span>
 </li>{% endfor %}
-<li id="former-vice-presidents-empty" class="item empty-state candidates-empty-state"{% if !former_vice_presidents.is_empty() %} hidden{% endif %}>No former vice presidents.</li>
+{% if former_vice_presidents.is_empty() %}<li id="former-vice-presidents-empty" class="item empty-state candidates-empty-state">No former vice presidents.</li>{% endif %}
 </ul>
 </section>
 

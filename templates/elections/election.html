@@ -21,9 +21,9 @@
 <ul id="election-actions-list" class="item-list election-actions-list">
 <li id="election-candidates-item" class="item election-action-item"><a id="election-candidates-link" class="navigation-link candidates-link" href="/elections/{{ election_uuid }}/candidates">View candidates</a></li>
 <li id="election-changes-item" class="item election-action-item"><a id="election-changes-link" class="navigation-link changes-link" href="/elections/{{ election_uuid }}/changes">View change log</a></li>
-<li id="election-register-item" class="item election-action-item"{% if !registration_open %} hidden{% endif %}><a id="election-register-link" class="navigation-link registration-link" href="/elections/{{ election_uuid }}/register">Register or manage candidacy</a></li>
-<li class="item election-action-item"{% if !code_open %} hidden{% endif %}><a href="/elections/{{ election_uuid }}/voter-code">Obtain voter code</a></li>
-<li class="item election-action-item"{% if !voting_open %} hidden{% endif %}><a href="/elections/{{ election_uuid }}/vote">Vote</a></li>
+{% if registration_open %}<li id="election-register-item" class="item election-action-item"><a id="election-register-link" class="navigation-link registration-link" href="/elections/{{ election_uuid }}/register">Register or manage candidacy</a></li>{% endif %}
+{% if code_open %}<li class="item election-action-item"><a href="/elections/{{ election_uuid }}/voter-code">Obtain voter code</a></li>{% endif %}
+{% if voting_open %}<li class="item election-action-item"><a href="/elections/{{ election_uuid }}/vote">Vote</a></li>{% endif %}
 </ul>
 </nav>
 <nav id="election-navigation" class="page-navigation elections-navigation"><a id="election-back-link" class="navigation-link back-link" href="/elections">Back to all elections</a></nav>

@@ -6,7 +6,7 @@
 <p id="census-month-description" class="page-description census-description">Review and update the records for this month. User information cannot be changed, and is displayed for reference only. Social links (Discord/Reddit) can only be changed by the citizens.</p>
 </header>
 
-<section id="census-activation-section" class="page-section manage-section census-section census-activation-section"{% if active %} hidden{% endif %}>
+{% if !(active) %}<section id="census-activation-section" class="page-section manage-section census-section census-activation-section">
 <header id="census-activation-header" class="section-header census-section-header census-activation-header">
 <h2 id="census-activation-title" class="section-title manage-section-title census-section-title">Use this census</h2>
 <p id="census-activation-description" class="section-description census-section-description">Activating this month replaces the census currently used by the application. The previous monthly record remains stored.</p>
@@ -14,7 +14,7 @@
 <form id="census-activation-form" class="manage-form census-form census-activation-form" method="post" action="/manage/census/{{ census_uuid }}/activate">
 <button id="census-activation-submit" class="form-button submit-button census-activation-button" type="submit">Use this census now</button>
 </form>
-</section>
+</section>{% endif %}
 
 <section id="census-citizens-section" class="page-section manage-section census-section census-citizens-section">
 <header id="census-citizens-header" class="section-header census-section-header census-citizens-header">
@@ -52,7 +52,7 @@
 </select></td>
 <td id="census-actions-{{ citizen.uuid }}" class="table-cell action-cell census-action-cell"><form id="census-citizen-form-{{ citizen.uuid }}" class="manage-form table-form census-citizen-form" method="post" action="/manage/census/{{ census_uuid }}/citizens/{{ citizen.uuid }}"><button id="census-citizen-save-{{ citizen.uuid }}" class="form-button table-button submit-button census-save-button" type="submit">Save</button></form></td>
 </tr>{% endfor %}
-<tr id="census-citizens-empty" class="table-row empty-row census-empty-row"{% if !citizens.is_empty() %} hidden{% endif %}><td id="census-citizens-empty-cell" class="table-cell empty-state census-empty-state" colspan="7">No citizens matched your search.</td></tr>
+{% if citizens.is_empty() %}<tr id="census-citizens-empty" class="table-row empty-row census-empty-row"><td id="census-citizens-empty-cell" class="table-cell empty-state census-empty-state" colspan="7">No citizens matched your search.</td></tr>{% endif %}
 </tbody>
 </table>
 </div>

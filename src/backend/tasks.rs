@@ -1,12 +1,23 @@
 use crate::backend::login_oauth::refresh_oauth_token;
 use crate::pages::login::AppState;
 use chrono::{TimeDelta, Utc};
-use sqlx::Row;
+use sqlx::postgres::PgListener;
 use tokio::time::{Duration, sleep};
 use tracing::{debug, error, info, trace, warn};
 
 pub async fn login_threads(state: AppState) {
     info!("Starting login background task supervisors");
+    let notification_state = state.clone();
+    tokio::spawn(async move {
+        loop {
+            if let Err(error) = run_login_notifications(&notification_state).await {
+                error!(?error, "PostgreSQL OAuth login notification listener stopped");
+            }
+            sleep(Duration::from_secs(5)).await;
+            warn!("Restarting PostgreSQL OAuth login notification listener");
+        }
+    });
+
     let cleaner_state = state.clone();
     tokio::spawn(async move {
         debug!("Login cleaner supervisor task started");
@@ -22,6 +33,26 @@ pub async fn login_threads(state: AppState) {
         run_election_snapshots(state).await;
     });
     debug!("Login background task supervisors spawned");
+}
+
+async fn run_login_notifications(
+    state: &AppState,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let mut listener = PgListener::connect_with(&state.pool).await?;
+    listener.listen("oauth_login_updates").await?;
+    info!("Listening for PostgreSQL OAuth login notifications");
+    loop {
+        let notification = listener.recv().await?;
+        match notification.payload().parse::<uuid::Uuid>() {
+            Ok(request_id) => {
+                let _ = state.login_updates.send(request_id);
+                trace!(%request_id, "Relayed PostgreSQL OAuth login notification");
+            }
+            Err(error) => {
+                warn!(?error, payload = notification.payload(), "Ignored malformed OAuth login notification");
+            }
+        }
+    }
 }
 
 async fn run_election_snapshots(state: AppState) {
@@ -49,21 +80,16 @@ async fn run_clean_login_threads(
     state: AppState,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     loop {
-        let (before, after) = {
-            let mut pending_logins = state.pending_logins.lock().unwrap();
-            let before = pending_logins.len();
-            pending_logins
-                .retain(|_, login| Utc::now() <= login.expires_at + TimeDelta::seconds(10));
-            (before, pending_logins.len())
-        };
-        if before != after {
-            debug!(
-                removed = before - after,
-                remaining = after,
-                "Removed expired pending logins"
-            );
+        let result = sqlx::query(
+            "DELETE FROM pending_oauth_logins
+             WHERE expires_at < CURRENT_TIMESTAMP - INTERVAL '10 seconds'",
+        )
+        .execute(&state.pool)
+        .await?;
+        if result.rows_affected() > 0 {
+            debug!(removed = result.rows_affected(), "Removed expired pending logins");
         } else {
-            trace!(pending_login_count = after, "Login cleaner cycle completed");
+            trace!("Login cleaner cycle completed");
         }
 
         sleep(Duration::from_secs(1)).await;
@@ -108,8 +134,8 @@ async fn run_refresh_oauth_tokens(
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     loop {
         trace!("Looking for OAuth tokens requiring refresh");
-        let sessions = sqlx::query(
-            "SELECT uuid, oauth_refresh_token
+        let sessions = sqlx::query_scalar::<_, uuid::Uuid>(
+            "SELECT uuid
             FROM sessions
             WHERE oauth_refresh_token IS NOT NULL
             AND oauth_token_expires_at <= CURRENT_TIMESTAMP + INTERVAL '5 minutes'
@@ -123,10 +149,38 @@ async fn run_refresh_oauth_tokens(
             "Loaded sessions requiring OAuth token refresh"
         );
 
-        for session in sessions {
-            let session_uuid: uuid::Uuid = session.get("uuid");
+        for session_uuid in sessions {
             trace!(%session_uuid, "Refreshing OAuth token for session");
-            let refresh_token: Vec<u8> = session.get("oauth_refresh_token");
+            let mut transaction = state.pool.begin().await?;
+            let claimed = sqlx::query_scalar::<_, bool>(
+                "SELECT pg_try_advisory_xact_lock(hashtextextended($1::text, 0))",
+            )
+            .bind(session_uuid)
+            .fetch_one(&mut *transaction)
+            .await?;
+            if !claimed {
+                trace!(%session_uuid, "Another instance is refreshing the OAuth token");
+                transaction.rollback().await?;
+                continue;
+            }
+            let refresh_token = sqlx::query_scalar::<_, Vec<u8>>(
+                "SELECT oauth_refresh_token
+                 FROM sessions
+                 WHERE uuid = $1
+                   AND oauth_refresh_token IS NOT NULL
+                   AND oauth_token_expires_at <= CURRENT_TIMESTAMP + INTERVAL '5 minutes'
+                   AND expires_at > CURRENT_TIMESTAMP
+                   AND revoked_at IS NULL
+                 FOR UPDATE",
+            )
+            .bind(session_uuid)
+            .fetch_optional(&mut *transaction)
+            .await?;
+            let Some(refresh_token) = refresh_token else {
+                trace!(%session_uuid, "OAuth token was already refreshed by another instance");
+                transaction.rollback().await?;
+                continue;
+            };
             let refresh_token = String::from_utf8(refresh_token)?;
 
             match refresh_oauth_token(&state, &refresh_token).await {
@@ -146,12 +200,14 @@ async fn run_refresh_oauth_tokens(
                             .map(|seconds| Utc::now() + TimeDelta::seconds(seconds)),
                     )
                     .bind(session_uuid)
-                    .execute(&state.pool)
+                    .execute(&mut *transaction)
                     .await?;
+                    transaction.commit().await?;
                     info!(%session_uuid, rows_affected = result.rows_affected(), "Refreshed OAuth token for session");
                 }
                 Err(error) => {
                     error!(?error, %session_uuid, "Failed to refresh OAuth token");
+                    transaction.rollback().await?;
                 }
             }
         }

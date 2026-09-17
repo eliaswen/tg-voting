@@ -14,11 +14,10 @@ use axum::{
     routing::post,
 };
 use serde::Deserialize;
-use std::collections::HashMap;
 use std::env;
 use std::net::SocketAddr;
-use std::sync::{Arc, Mutex};
 use std::time::Instant;
+use tokio::sync::broadcast;
 use tracing::{debug, error, info, trace, warn};
 use version::get_version;
 
@@ -160,9 +159,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (discord_client_id, discord_client_secret) =
         get_discord_oauth_configuration(&oauth_info.public_host);
 
+    let (login_updates, _) = broadcast::channel(256);
     let state = AppState {
         pool,
-        pending_logins: Arc::new(Mutex::new(HashMap::new())),
+        login_updates,
         oauth_client_id: oauth_info.client_id,
         oauth_client_secret: oauth_info.client_secret,
         oauth_authorize_url: oauth_info.authorize_url,

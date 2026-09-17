@@ -130,12 +130,35 @@ pub async fn get_debug(
                 .into_response()
         }
         "login-threads" => {
-            let page = {
-                let pending = state.pending_logins.lock().unwrap();
-                LoginThreadsDebugPage {
-                    count: pending.len(),
-                    pending_logins: format!("{pending:?}"),
-                }
+            let page = match sqlx::query(
+                "SELECT request_id, flow, status, device_type, device_name, created_at, expires_at
+                 FROM pending_oauth_logins
+                 ORDER BY created_at",
+            )
+            .fetch_all(&state.pool)
+            .await
+            {
+                Ok(rows) => LoginThreadsDebugPage {
+                    count: rows.len(),
+                    pending_logins: format!(
+                        "{:?}",
+                        rows.iter()
+                            .map(|row| (
+                                row.get::<uuid::Uuid, _>("request_id"),
+                                row.get::<String, _>("flow"),
+                                row.get::<String, _>("status"),
+                                row.get::<String, _>("device_type"),
+                                row.get::<String, _>("device_name"),
+                                row.get::<chrono::DateTime<chrono::Utc>, _>("created_at"),
+                                row.get::<chrono::DateTime<chrono::Utc>, _>("expires_at"),
+                            ))
+                            .collect::<Vec<_>>()
+                    ),
+                },
+                Err(error) => LoginThreadsDebugPage {
+                    count: 0,
+                    pending_logins: format!("Database error: {error}"),
+                },
             };
             render_template_page(&page, "Login Threads", cookies, &state.pool)
                 .await

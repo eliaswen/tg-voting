@@ -5,9 +5,9 @@
         <p id="device-login-code" class="device-code">
 <strong id="device-login-code-value" class="device-code-value">{{ user_code }}</strong>
 </p>
-        <p id="device-login-complete-navigation" class="page-navigation verification-navigation"{% if !has_verification_uri_complete %} hidden{% endif %}>
+        {% if has_verification_uri_complete %}<p id="device-login-complete-navigation" class="page-navigation verification-navigation">
 <a id="device-login-complete-link" class="external-link verification-link" href="{{ verification_uri_complete }}" target="_blank">Open a new tab with the code filled in</a>
-</p>
+</p>{% endif %}
         <p id="device-login-waiting" class="status-message login-status pending-message">This page will continue automatically after you approve the login.</p>
         <p id="device-login-manual" class="help-message manual-check-help">If it does not continue automatically, <a id="device-login-manual-link" class="navigation-link manual-check-link" href="/login/oauth/manual-check/{{ request_id }}">check the login status manually</a>.</p>
     </section>

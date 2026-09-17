@@ -14,9 +14,8 @@ use futures_util::stream::{self, Stream};
 use reqwest::Client;
 use serde::Deserialize;
 use sqlx::{Row, postgres::PgPool};
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
-use tokio::time::{Duration, sleep};
+use tokio::sync::broadcast;
+use tokio::time::{Duration, timeout};
 use tracing::{debug, error, info, trace, warn};
 
 use crate::backend::login_oauth::{
@@ -36,8 +35,6 @@ pub enum PendingLoginStatus {
 #[derive(Clone, Debug)]
 pub struct PendingLogin {
     pub status: PendingLoginStatus,
-    pub created_at: DateTime<Utc>,
-    pub expires_at: DateTime<Utc>,
     pub device: SessionDevice,
 }
 
@@ -58,7 +55,7 @@ pub struct OAuthCallbackParams {
 pub struct AppState {
     pub pool: PgPool,
     #[from_ref(skip)]
-    pub pending_logins: Arc<Mutex<HashMap<uuid::Uuid, PendingLogin>>>,
+    pub login_updates: broadcast::Sender<uuid::Uuid>,
     #[from_ref(skip)]
     pub oauth_client_id: String,
     #[from_ref(skip)]
@@ -86,6 +83,143 @@ pub struct AppState {
     pub discord_client_id: Option<String>,
     #[from_ref(skip)]
     pub discord_client_secret: Option<String>,
+}
+
+pub(crate) async fn create_pending_login(
+    state: &AppState,
+    request_id: uuid::Uuid,
+    flow: &str,
+    expires_at: DateTime<Utc>,
+    device: &SessionDevice,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "INSERT INTO pending_oauth_logins
+         (request_id, flow, device_type, device_name, expires_at)
+         VALUES ($1, $2, $3, $4, $5)",
+    )
+    .bind(request_id)
+    .bind(flow)
+    .bind(&device.device_type)
+    .bind(&device.device_name)
+    .bind(expires_at)
+    .execute(&state.pool)
+    .await?;
+    Ok(())
+}
+
+pub(crate) async fn pending_login(
+    state: &AppState,
+    request_id: uuid::Uuid,
+) -> Result<Option<PendingLogin>, sqlx::Error> {
+    let row = sqlx::query(
+        "SELECT status, session_token, error_code, device_type, device_name, expires_at
+         FROM pending_oauth_logins
+         WHERE request_id = $1",
+    )
+    .bind(request_id)
+    .fetch_optional(&state.pool)
+    .await?;
+    Ok(row.map(|row| {
+        let status_name: String = row.get("status");
+        let expires_at: DateTime<Utc> = row.get("expires_at");
+        let status = if matches!(status_name.as_str(), "pending" | "processing")
+            && expires_at <= Utc::now()
+        {
+            PendingLoginStatus::Failed("oauth-expired".to_string())
+        } else {
+            match status_name.as_str() {
+                "pending" | "processing" => PendingLoginStatus::Pending,
+                "complete" => PendingLoginStatus::Complete(
+                    row.get::<Option<String>, _>("session_token")
+                        .unwrap_or_default(),
+                ),
+                "failed" => PendingLoginStatus::Failed(
+                    row.get::<Option<String>, _>("error_code")
+                        .unwrap_or_else(|| "oauth-failure".to_string()),
+                ),
+                _ => PendingLoginStatus::Failed("session-error".to_string()),
+            }
+        };
+        PendingLogin {
+            status,
+            device: SessionDevice {
+                device_type: row.get("device_type"),
+                device_name: row.get("device_name"),
+            },
+        }
+    }))
+}
+
+pub(crate) async fn claim_pending_login(
+    state: &AppState,
+    request_id: uuid::Uuid,
+) -> Result<Option<SessionDevice>, sqlx::Error> {
+    sqlx::query(
+        "UPDATE pending_oauth_logins
+         SET status = 'processing', updated_at = CURRENT_TIMESTAMP
+         WHERE request_id = $1 AND flow = 'browser'
+           AND status = 'pending' AND expires_at > CURRENT_TIMESTAMP
+         RETURNING device_type, device_name",
+    )
+    .bind(request_id)
+    .fetch_optional(&state.pool)
+    .await
+    .map(|row| {
+        row.map(|row| SessionDevice {
+            device_type: row.get("device_type"),
+            device_name: row.get("device_name"),
+        })
+    })
+}
+
+pub(crate) async fn set_pending_login_status(
+    state: &AppState,
+    request_id: uuid::Uuid,
+    status: PendingLoginStatus,
+) -> Result<bool, sqlx::Error> {
+    let (status_name, session_token, error_code) = match status {
+        PendingLoginStatus::Pending => ("pending", None, None),
+        PendingLoginStatus::Complete(token) => ("complete", Some(token), None),
+        PendingLoginStatus::Failed(error) => ("failed", None, Some(error)),
+    };
+    let result = sqlx::query(
+        "UPDATE pending_oauth_logins
+         SET status = $2, session_token = $3, error_code = $4,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE request_id = $1 AND status IN ('pending', 'processing')",
+    )
+    .bind(request_id)
+    .bind(status_name)
+    .bind(session_token)
+    .bind(error_code)
+    .execute(&state.pool)
+    .await?;
+    Ok(result.rows_affected() == 1)
+}
+
+async fn take_pending_login(
+    state: &AppState,
+    request_id: uuid::Uuid,
+) -> Result<Option<PendingLoginStatus>, sqlx::Error> {
+    let row = sqlx::query(
+        "DELETE FROM pending_oauth_logins
+         WHERE request_id = $1 AND status IN ('complete', 'failed')
+         RETURNING status, session_token, error_code",
+    )
+    .bind(request_id)
+    .fetch_optional(&state.pool)
+    .await?;
+    Ok(row.map(|row| match row.get::<String, _>("status").as_str() {
+        "complete" => PendingLoginStatus::Complete(
+            row.get::<Option<String>, _>("session_token")
+                .unwrap_or_default(),
+        ),
+        "failed" => PendingLoginStatus::Failed(
+            row.get::<Option<String>, _>("error_code")
+                .unwrap_or_else(|| "oauth-failure".to_string()),
+        ),
+        _ => PendingLoginStatus::Pending,
+    }))
 }
 
 #[derive(Template)]
@@ -161,20 +295,18 @@ pub async fn get_login(State(state): State<AppState>, jar: CookieJar) -> impl In
         .into_response();
 }
 
-pub async fn get_login_oauth(State(state): State<AppState>, headers: HeaderMap) -> Redirect {
+pub async fn get_login_oauth(State(state): State<AppState>, headers: HeaderMap) -> impl IntoResponse {
     trace!("Starting browser OAuth login");
     let redirect_uri = format!("{}/login/oauth/callback", state.public_host);
     let request_id = uuid::Uuid::now_v7();
     let device = session_device(&headers);
-    state.pending_logins.lock().unwrap().insert(
-        request_id,
-        PendingLogin {
-            status: PendingLoginStatus::Pending,
-            created_at: Utc::now(),
-            expires_at: Utc::now() + chrono::TimeDelta::seconds(120),
-            device: device.clone(),
-        },
-    );
+    let expires_at = Utc::now() + chrono::TimeDelta::seconds(120);
+    if let Err(error) =
+        create_pending_login(&state, request_id, "browser", expires_at, &device).await
+    {
+        error!(?error, %request_id, "Could not register pending browser OAuth login");
+        return StatusCode::SERVICE_UNAVAILABLE.into_response();
+    }
     debug!(%request_id, device_type = %device.device_type, device_name = %device.device_name, "Registered pending browser OAuth login");
 
     let auth_url = format!(
@@ -187,7 +319,7 @@ pub async fn get_login_oauth(State(state): State<AppState>, headers: HeaderMap) 
     );
 
     trace!(%request_id, "Redirecting browser OAuth login to identity provider");
-    Redirect::temporary(&auth_url)
+    Redirect::temporary(&auth_url).into_response()
 }
 
 pub async fn get_login_oauth_device(
@@ -238,15 +370,23 @@ pub async fn get_login_oauth_device(
     let request_id = uuid::Uuid::now_v7();
     let expires_at = Utc::now() + chrono::TimeDelta::seconds(authorization.expires_in);
     let device = session_device(&headers);
-    state.pending_logins.lock().unwrap().insert(
-        request_id,
-        PendingLogin {
-            status: PendingLoginStatus::Pending,
-            created_at: Utc::now(),
-            expires_at,
-            device: device.clone(),
-        },
-    );
+    if let Err(error) =
+        create_pending_login(&state, request_id, "device", expires_at, &device).await
+    {
+        error!(?error, %request_id, "Could not register pending device OAuth login");
+        return themed_error_response(
+            StatusCode::SERVICE_UNAVAILABLE,
+            &ErrorPage::new(
+                "Device login unavailable",
+                "The login session could not be started.",
+                "device-login-unavailable-page",
+            )
+            .with_back("/login", "Use the regular login"),
+            &state,
+            jar,
+        )
+        .await;
+    }
     debug!(%request_id, %expires_at, device_type = %device.device_type, device_name = %device.device_name, "Registered pending OAuth device login");
     trace!(%request_id, "Spawning OAuth device login polling task");
     tokio::spawn(poll_device_login(
@@ -297,27 +437,52 @@ pub async fn get_login_oauth_callback(
             "session-error"
         };
         warn!(%request_id, provider_error = params.error.is_some(), "OAuth callback did not contain an authorization code");
+        match claim_pending_login(&state, request_id).await {
+            Ok(Some(_)) => {
+                if let Err(database_error) = set_pending_login_status(
+                    &state,
+                    request_id,
+                    PendingLoginStatus::Failed(error.to_string()),
+                )
+                .await
+                {
+                    error!(?database_error, %request_id, "Could not store rejected OAuth callback");
+                }
+            }
+            Ok(None) => warn!(%request_id, "Rejected OAuth callback did not match a pending browser login"),
+            Err(database_error) => {
+                error!(?database_error, %request_id, "Could not claim rejected OAuth callback")
+            }
+        }
         return render_template_page(&login_error_page(error), "Login error", jar, &state.pool)
             .await;
     };
-    if !state
-        .pending_logins
-        .lock()
-        .unwrap()
-        .contains_key(&request_id)
-    {
-        warn!(%request_id, "OAuth callback referenced an unknown pending login");
-        return render_template_page(
-            &login_error_page("session-error"),
-            "Login error",
-            jar,
-            &state.pool,
-        )
-        .await;
-    }
+    let device = match claim_pending_login(&state, request_id).await {
+        Ok(Some(device)) => device,
+        Ok(None) => {
+            warn!(%request_id, "OAuth callback referenced an unknown, expired, or already claimed login");
+            return render_template_page(
+                &login_error_page("session-error"),
+                "Login error",
+                jar,
+                &state.pool,
+            )
+            .await;
+        }
+        Err(error) => {
+            error!(?error, %request_id, "Could not claim pending OAuth login");
+            return render_template_page(
+                &login_error_page("session-error"),
+                "Login error",
+                jar,
+                &state.pool,
+            )
+            .await;
+        }
+    };
     debug!(%request_id, "OAuth callback matched pending login");
     trace!(%request_id, "Spawning OAuth callback completion task");
-    tokio::spawn(handle_oauth_callback(state.clone(), request_id, code));
+    tokio::spawn(handle_oauth_callback(state.clone(), request_id, code, device));
 
     render_template_page(&OauthCallbackPage { request_id }, "Signing in", jar, &state.pool).await
 }
@@ -326,13 +491,29 @@ pub async fn get_login_oauth_status(
     State(state): State<AppState>,
     Path(request_id): Path<uuid::Uuid>,
 ) -> Sse<impl Stream<Item = Result<Event, BoxError>>> {
+    let mut updates = state.login_updates.subscribe();
     let stream = stream::once(async move {
         loop {
-            let status = {
-                state.pending_logins.lock().unwrap().get(&request_id).map(|login| login.status.clone())
+            let status = match pending_login(&state, request_id).await {
+                Ok(login) => login.map(|login| login.status),
+                Err(error) => {
+                    error!(?error, %request_id, "Could not read pending OAuth login status");
+                    return Ok(Event::default().event("error").data("session-error"));
+                }
             };
             match status {
-                Some(PendingLoginStatus::Pending) => sleep(Duration::from_millis(250)).await,
+                Some(PendingLoginStatus::Pending) => loop {
+                    match timeout(Duration::from_secs(15), updates.recv()).await {
+                        Ok(Ok(updated_request_id)) if updated_request_id == request_id => break,
+                        Ok(Ok(_)) => continue,
+                        Ok(Err(broadcast::error::RecvError::Lagged(_))) | Err(_) => break,
+                        Ok(Err(broadcast::error::RecvError::Closed)) => {
+                            return Ok(Event::default()
+                                .event("error")
+                                .data("session-error"));
+                        }
+                    }
+                },
                 Some(PendingLoginStatus::Complete(_)) => return Ok(Event::default().event("redirect").data(format!("/login/oauth/complete/{request_id}"))),
                 Some(PendingLoginStatus::Failed(error)) => return Ok(Event::default().event("error").data(error)),
                 None => return Ok(Event::default().event("error").data("session-error")),
@@ -348,12 +529,13 @@ pub async fn get_login_oauth_manual_check(
     Path(request_id): Path<uuid::Uuid>,
 ) -> impl IntoResponse {
     trace!(%request_id, "Handling manual OAuth status check");
-    let status = state
-        .pending_logins
-        .lock()
-        .unwrap()
-        .get(&request_id)
-        .map(|login| login.status.clone());
+    let status = match pending_login(&state, request_id).await {
+        Ok(login) => login.map(|login| login.status),
+        Err(error) => {
+            error!(?error, %request_id, "Could not read pending OAuth login status");
+            None
+        }
+    };
 
     match status {
         Some(PendingLoginStatus::Pending) => {
@@ -396,9 +578,15 @@ pub async fn get_login_oauth_complete(
     Path(request_id): Path<uuid::Uuid>,
 ) -> impl IntoResponse {
     trace!(%request_id, "Completing OAuth login response");
-    let login = state.pending_logins.lock().unwrap().remove(&request_id);
+    let login = match take_pending_login(&state, request_id).await {
+        Ok(login) => login,
+        Err(error) => {
+            error!(?error, %request_id, "Could not consume completed OAuth login");
+            None
+        }
+    };
 
-    match login.map(|login| login.status) {
+    match login {
         Some(PendingLoginStatus::Complete(session_token)) => {
             debug!(%request_id, "Issuing session cookie for completed OAuth login");
             let mut headers = HeaderMap::new();

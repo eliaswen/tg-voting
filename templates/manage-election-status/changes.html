@@ -8,7 +8,7 @@
 </form>
 <ul id="election-changes-list" class="item-list changes-list">{% for change in changes %}<li id="election-change-item" class="item change-item">
 <time id="election-change-time" class="change-time">{{ change.changed_at }}</time>: <span id="election-change-actor" class="change-actor">{{ change.actor }}</span> changed <span id="election-change-target" class="change-target">{{ change.target }}</span> from <span id="election-change-previous" class="change-value previous-value">{{ change.previous }}</span> to <span id="election-change-new" class="change-value new-value">{{ change.new }}</span>. Reason: <span id="election-change-reason" class="change-reason">{{ change.reason }}</span>
-</li>{% endfor %}<li id="election-changes-empty" class="item empty-state changes-empty-state"{% if !changes.is_empty() %} hidden{% endif %}>No changes matched your search.</li>
+</li>{% endfor %}{% if changes.is_empty() %}<li id="election-changes-empty" class="item empty-state changes-empty-state">No changes matched your search.</li>{% endif %}
 </ul>
 <nav id="election-changes-navigation" class="page-navigation elections-navigation">
 <a id="election-changes-overview-link" class="navigation-link election-link" href="/elections/{{ election_uuid }}">Election overview</a> | <a id="election-changes-candidates-link" class="navigation-link candidates-link" href="/elections/{{ election_uuid }}/candidates">Candidates</a> | <a id="election-changes-elections-link" class="navigation-link elections-link" href="/elections">All elections</a>
