@@ -7,6 +7,7 @@ COPY Cargo.toml Cargo.lock ./
 COPY src ./src
 COPY templates ./templates
 COPY migrations ./migrations
+COPY assets ./assets
 
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/local/cargo/git \
