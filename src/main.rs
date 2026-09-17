@@ -201,6 +201,7 @@ async fn build_router(state: AppState) -> Router {
     trace!("Building application router");
     let mut router = Router::new()
         .route("/", get(get_homepage))
+        .route("/favicon.ico", get(get_favicon))
         .route("/about", get(get_about))
         .route("/health/live", get(|| async { "ok" }))
         .route("/health/ready", get(health_ready))
@@ -330,6 +331,16 @@ async fn build_router(state: AppState) -> Router {
         .layer(middleware::from_fn(log_request));
 
     router.with_state(state)
+}
+
+async fn get_favicon() -> impl IntoResponse {
+    (
+        [
+            (header::CONTENT_TYPE, "image/png"),
+            (header::CACHE_CONTROL, "public, max-age=86400"),
+        ],
+        include_bytes!("../assets/logo.png").as_slice(),
+    )
 }
 
 async fn log_request(request: Request, next: Next) -> Response {

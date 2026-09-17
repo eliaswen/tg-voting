@@ -3,6 +3,7 @@
 <head id="document-head" class="document-head theme-head black-simple-theme-head">
 <meta id="document-charset" class="document-meta charset-meta" charset="utf-8">
 <meta id="document-viewport" class="document-meta viewport-meta" name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" type="image/png" href="/favicon.ico">
 <title id="document-title" class="document-title">{{ page_title }}</title>
 <style>
 html { background: #000; color: #e6e6e6; color-scheme: dark; font-family: Arial, sans-serif; }
@@ -24,6 +25,7 @@ a:hover { color: #b8d8f5; }
 .brand-cell, .account-cell, .copyright-cell, .theme-cell { white-space: nowrap; }
 .navigation-cell { padding: 0 10px; }
 .site-navigation { white-space: nowrap; }
+.site-logo { display: block; height: auto; max-width: 100%; transform: scale(1.3333); transform-origin: left center; width: 72px; }
 .page-content {
     background: #000;
     border: 1px solid #444;
@@ -36,6 +38,7 @@ a:hover { color: #b8d8f5; }
 .site-navigation a, .page-navigation a, .item-navigation a { text-decoration: none; }
 .navigation-button, .form-button { background: #303030; border: 1px solid #666; border-radius: 3px; color: #e6e6e6; cursor: pointer; padding: 7px 11px; }
 .navigation-button:hover, .form-button:hover { background: #3d3d3d; }
+.about-star { font-size: 0.8em; }
 .action-link {
     background: #303030;
     border: 1px solid #666;
@@ -80,6 +83,7 @@ body { padding: 0 10px; }
 .brand-cell, .account-cell, .copyright-cell, .theme-cell { white-space: normal; align-self: center; text-align: center; }
 .navigation-cell { padding: 0; }
 .site-navigation { line-height: 1.8; white-space: normal; }
+.site-logo { margin: 0 auto; transform-origin: center; }
 .navigation-button, .form-button, .action-link { min-height: 36px; box-sizing: border-box; }
 .form-control { max-width: 100%; }
 .search-input { min-width: 0; width: 100%; }
@@ -96,8 +100,7 @@ img, video, iframe { max-width: 100%; height: auto; }
 <table id="header-layout" class="layout-table header-layout">
 <tr id="header-layout-row" class="layout-row header-layout-row">
 <td id="header-brand-cell" class="layout-cell brand-cell">
-<strong id="site-brand" class="site-brand">TeenGovernment Voting</strong><br>
-<small id="preview-notice" class="preview-notice">Early Preview</small>
+<a id="site-brand" class="site-brand" href="/" aria-label="TeenGovernment Voting home"><img id="site-logo" class="site-logo" src="/favicon.ico" alt="TeenGovernment Voting"></a>
 </td>
 <td id="header-navigation-cell" class="layout-cell navigation-cell" align="center">
 <nav id="site-navigation" class="site-navigation header-navigation">
@@ -122,7 +125,7 @@ img, video, iframe { max-width: 100%; height: auto; }
 <table id="footer-layout" class="layout-table footer-layout">
 <tr id="footer-layout-row" class="layout-row footer-layout-row">
 <td id="footer-copyright-cell" class="layout-cell copyright-cell">
-<small id="footer-copyright" class="footer-copyright">Early preview<br><a id="footer-source-link" class="external-link source-link" href="https://github.com/eliaswen/tg-voting">Copyright © ewi and contributors</a></small>
+<small id="footer-copyright" class="footer-copyright">Pre-production release<br><a id="footer-source-link" class="external-link source-link" href="https://github.com/eliaswen/tg-voting">Copyright © ewi and contributors</a></small>
 </td>
 <td id="footer-navigation-cell" class="layout-cell navigation-cell" align="center">
 <nav id="footer-navigation" class="site-navigation footer-navigation">Found a problem? Report it on the 

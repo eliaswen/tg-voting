@@ -5,6 +5,7 @@
     <meta id="document-charset" class="document-meta charset-meta" charset="utf-8">
     <meta id="document-viewport" class="document-meta viewport-meta" name="viewport"
         content="width=device-width, initial-scale=1">
+    <link rel="icon" type="image/png" href="/favicon.ico">
     <title id="document-title" class="document-title">{{ page_title }}</title>
 
     <style>
@@ -64,6 +65,16 @@
         .site-navigation {
             white-space: nowrap;
         }
+
+        .site-logo {
+            display: block;
+            height: auto;
+            max-width: 100%;
+            transform: scale(1.3333);
+            transform-origin: left center;
+            width: 72px;
+        }
+        .about-star { font-size: 0.8em; }
 
         .page-content {
             background: white;
@@ -295,6 +306,11 @@
                 white-space: normal;
             }
 
+            .site-logo {
+                margin: 0 auto;
+                transform-origin: center;
+            }
+
             .navigation-button,
             .form-button,
             .action-link {
@@ -343,8 +359,7 @@
             <tr id="header-layout-row" class="layout-row header-layout-row">
 
                 <td id="header-brand-cell" class="layout-cell brand-cell">
-                    <strong id="site-brand" class="site-brand">TeenGovernment Voting</strong><br>
-                    <small id="preview-notice" class="preview-notice">Early Preview</small>
+                    <a id="site-brand" class="site-brand" href="/" aria-label="TeenGovernment Voting home"><img id="site-logo" class="site-logo" src="/favicon.ico" alt="TeenGovernment Voting"></a>
                 </td>
 
                 <td id="header-navigation-cell" class="layout-cell navigation-cell" align="center">
@@ -381,7 +396,7 @@
 
                 <td id="footer-copyright-cell" class="layout-cell copyright-cell">
                     <small id="footer-copyright" class="footer-copyright">
-                        Early preview<br>
+                        Pre-production release<br>
                         <a id="footer-source-link" class="external-link source-link"
                             href="https://github.com/eliaswen/tg-voting">Copyright © ewi and contributors</a>
                     </small>
