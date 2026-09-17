@@ -33,7 +33,7 @@ ENV LOG_LEVEL=info
 EXPOSE 3000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-    CMD curl --fail --silent --show-error http://127.0.0.1:3000/health/live && \
-        curl --fail --silent --show-error http://127.0.0.1:3000/health/ready || exit 1
+    CMD curl --fail --silent --show-error "http://127.0.0.1:${BIND_PORT:-3000}/health/live" && \
+        curl --fail --silent --show-error "http://127.0.0.1:${BIND_PORT:-3000}/health/ready" || exit 1
 
 ENTRYPOINT ["/usr/local/bin/tg-voting"]
