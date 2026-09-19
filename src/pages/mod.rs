@@ -5,6 +5,7 @@ pub mod candidates;
 pub mod census;
 pub mod debug;
 pub mod election_lifecycle;
+pub mod election_posts;
 pub mod elections;
 pub mod homepage;
 pub mod info;
@@ -39,6 +40,7 @@ pub use census::{
 };
 pub use debug::{get_debug, post_debug};
 pub use elections::{get_election, get_elections};
+pub use election_posts::get_election_posts;
 pub use homepage::get_homepage;
 pub use info::{get_about, get_contact, get_issues, get_staging};
 pub use login::{

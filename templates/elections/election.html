@@ -16,6 +16,11 @@
 <dt id="election-voting-end-label" class="detail-label">Voting ends</dt><dd id="election-voting-end-value" class="detail-value">{{ voting_ends_at }}</dd>
 </dl>
 </section>
+{% if show_live_votes %}<section id="election-live-votes" class="page-section election-section live-votes-section">
+<h2 id="election-live-votes-title" class="section-title election-section-title">Live votes</h2>
+<p id="election-live-votes-count" class="status-message live-votes-count"><strong>{{ live_votes }}</strong> ballots currently visible.</p>
+<p id="election-live-votes-delay" class="section-description">To ensure anonymity, each submitted ballot appears after a random delay of 10 to 120 minutes. Currently only the raw votes are shown, this might (and probably will) change in the future.</p>
+</section>{% endif %}
 <nav id="election-actions" class="page-section election-section election-actions">
 <h2 id="election-actions-title" class="section-title election-section-title">Election pages</h2>
 <ul id="election-actions-list" class="item-list election-actions-list">

@@ -58,7 +58,7 @@
 </form></section>
 
 <section><h2>Historical count rounds</h2><p>Ordinary revotes retain historical rounds for audit.</p>
-{% for round in history %}<details><summary>{{ round.contest }} round {{ round.round }} — {{ round.status }} ({{ round.revote }})</summary><pre>{{ round.details }}</pre></details>{% endfor %}
+{% for round in history %}<details><summary>{{ round.contest }} round {{ round.round }} - {{ round.status }} ({{ round.revote }})</summary><pre>{{ round.details }}</pre></details>{% endfor %}
 </section>
 <p><a href="/manage/elections/{{ election_uuid }}/status">Back to status</a></p>
 </section>

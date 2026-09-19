@@ -115,13 +115,20 @@ pub async fn get_election(
 ) -> Response {
     trace!(%election_uuid, "Handling election overview request");
     let timezone = crate::render::timezone(&jar);
-    let election_query = "SELECT season, name, description, election_type::text AS election_type, status::text AS status, paused_stage,
-                registration_starts_at AS registration_start_raw, registration_ends_at AS registration_end_raw, voting_starts_at AS voting_start_raw, voting_ends_at AS voting_end_raw,
-                COALESCE(to_char(registration_starts_at AT TIME ZONE 'Europe/Paris', 'YYYY-MM-DD HH24:MI') || ' Europe/Paris', 'Not scheduled') AS registration_starts_at,
-                COALESCE(to_char(registration_ends_at AT TIME ZONE 'Europe/Paris', 'YYYY-MM-DD HH24:MI') || ' Europe/Paris', 'Not scheduled') AS registration_ends_at,
-                COALESCE(to_char(voting_starts_at AT TIME ZONE 'Europe/Paris', 'YYYY-MM-DD HH24:MI') || ' Europe/Paris', 'Not scheduled') AS voting_starts_at,
-                COALESCE(to_char(voting_ends_at AT TIME ZONE 'Europe/Paris', 'YYYY-MM-DD HH24:MI') || ' Europe/Paris', 'Not scheduled') AS voting_ends_at
-         FROM elections WHERE uuid = $1 AND status <> 'draft'".replace("Europe/Paris", &timezone);
+    let election_query = "SELECT elections.season, elections.name, elections.description,
+                elections.election_type::text AS election_type, elections.status::text AS status, elections.paused_stage,
+                elections.registration_starts_at AS registration_start_raw, elections.registration_ends_at AS registration_end_raw,
+                elections.voting_starts_at AS voting_start_raw, elections.voting_ends_at AS voting_end_raw,
+                COALESCE(to_char(elections.registration_starts_at AT TIME ZONE 'Europe/Paris', 'YYYY-MM-DD HH24:MI') || ' Europe/Paris', 'Not scheduled') AS registration_starts_at,
+                COALESCE(to_char(elections.registration_ends_at AT TIME ZONE 'Europe/Paris', 'YYYY-MM-DD HH24:MI') || ' Europe/Paris', 'Not scheduled') AS registration_ends_at,
+                COALESCE(to_char(elections.voting_starts_at AT TIME ZONE 'Europe/Paris', 'YYYY-MM-DD HH24:MI') || ' Europe/Paris', 'Not scheduled') AS voting_starts_at,
+                COALESCE(to_char(elections.voting_ends_at AT TIME ZONE 'Europe/Paris', 'YYYY-MM-DD HH24:MI') || ' Europe/Paris', 'Not scheduled') AS voting_ends_at,
+                COALESCE(clock_timestamp() >= elections.voting_starts_at, FALSE) AS show_live_votes,
+                (SELECT count(*) FROM ballots
+                 WHERE ballots.election_id = elections.uuid
+                   AND ballots.revote_id IS NOT DISTINCT FROM elections.active_revote_id
+                   AND ballots.submitted_at + ballots.delay <= clock_timestamp()) AS live_votes
+         FROM elections WHERE elections.uuid = $1 AND elections.status <> 'draft'".replace("Europe/Paris", &timezone);
     let election = match sqlx::query(sqlx::AssertSqlSafe(election_query.as_str()))
         .bind(election_uuid)
         .fetch_optional(&state.pool)
@@ -178,6 +185,8 @@ pub async fn get_election(
                 .get::<Option<chrono::DateTime<chrono::Utc>>, _>("registration_start_raw")
                 .unwrap_or(chrono::DateTime::<chrono::Utc>::MAX_UTC),
         voting_open: timeline.stage == "voting",
+        show_live_votes: election.get("show_live_votes"),
+        live_votes: election.get("live_votes"),
         status: timeline.stage_label,
     };
     render_template_page(&page, "Election", jar, &state.pool)
@@ -231,4 +240,6 @@ struct ElectionPage {
     registration_open: bool,
     code_open: bool,
     voting_open: bool,
+    show_live_votes: bool,
+    live_votes: i64,
 }

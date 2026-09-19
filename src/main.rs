@@ -30,7 +30,8 @@ use pages::{
     get_about, get_account_appearance, get_account_overview, get_account_sessions,
     get_account_social, get_candidate_registration, get_census, get_census_month, get_contact,
     get_debug, get_discord_callback, get_discord_link, get_edit_election, get_election,
-    get_election_candidates, get_election_changes, get_elections, get_homepage, get_issues,
+    get_election_candidates, get_election_changes, get_election_posts, get_elections, get_homepage,
+    get_issues,
     get_list_themes_page, get_login, get_login_oauth, get_login_oauth_callback,
     get_login_oauth_complete, get_login_oauth_device, get_login_oauth_manual_check,
     get_login_oauth_status, get_logout,
@@ -264,6 +265,10 @@ async fn build_router(state: AppState) -> Router {
         .route(
             "/manage/elections/{election_uuid}",
             get(get_manage_election),
+        )
+        .route(
+            "/manage/elections/{election_uuid}/posts",
+            get(get_election_posts),
         )
         .route("/manage", get(get_management))
         .route("/manage/elections/{election_uuid}/results", get(get_result_review).post(post_result_review))

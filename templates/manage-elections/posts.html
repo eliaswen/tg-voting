@@ -1,0 +1,22 @@
+<section class="page manage-page election-posts-page">
+<p class="page-context"><a class="navigation-link back-link" href="/manage/elections/{{ election_uuid }}">Election dashboard</a></p>
+<h1>Announcement posts: {{ election_name }}</h1>
+<p>These posts use the current election schedule and public pages. Discord posts use Discord timestamps; Reddit posts use readable UTC dates. Candidate names prefer the destination platform and fall back to the candidate's username on the other linked platform.</p>
+
+<section><h2>Applications open</h2>
+<h3>Discord</h3><textarea rows="9" readonly>{{ registration_discord }}</textarea>
+<h3>Reddit</h3><textarea rows="9" readonly>{{ registration_reddit }}</textarea></section>
+
+<section><h2>Voting open</h2>
+<h3>Discord</h3><textarea rows="10" readonly>{{ voting_discord }}</textarea>
+<h3>Reddit</h3><textarea rows="10" readonly>{{ voting_reddit }}</textarea></section>
+
+<section><h2>Results</h2>
+{% if results_ready %}
+<h3>Discord</h3><textarea rows="30" readonly>{{ results_discord }}</textarea>
+<h3>Reddit</h3><textarea rows="30" readonly>{{ results_reddit }}</textarea>
+{% else %}<p>The results post will be generated after this election is certified.</p>{% endif %}
+</section>
+
+<p><a class="navigation-link back-link" href="/manage/elections/{{ election_uuid }}">Back to election dashboard</a></p>
+</section>
