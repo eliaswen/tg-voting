@@ -94,8 +94,7 @@ pub async fn get_results(
              SELECT results.contest::text AS contest,
                     COALESCE(NULLIF(identities.preferred_username, ''),
                              NULLIF(identities.display_name, ''),
-                             NULLIF(citizens.citizen_id, ''),
-                             'Citizen ' || citizens.uuid::text) AS actor,
+                             'Election manager') AS actor,
                     to_char(results.certified_at AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI UTC') AS certified_at,
                     results.certification_reason AS reason
              FROM current_results results JOIN citizens ON citizens.uuid = results.certified_by

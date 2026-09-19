@@ -19,7 +19,7 @@
 <section id="census-citizens-section" class="page-section manage-section census-section census-citizens-section">
 <header id="census-citizens-header" class="section-header census-section-header census-citizens-header">
 <h2 id="census-citizens-title" class="section-title manage-section-title census-section-title">Citizen records</h2>
-<p id="census-citizens-description" class="section-description census-section-description">Citizen IDs are write-only and are never displayed. Leave the field blank to keep the existing ID.</p>
+<p id="census-citizens-description" class="section-description census-section-description">Citizen IDs are visible here to census managers and can be updated with the rest of the citizen record.</p>
 </header>
 <form id="census-citizens-search-form" class="search-form census-search-form" method="get" action="/manage/census/{{ census_uuid }}">
 <label id="census-citizens-search-label" class="form-label search-label" for="census-citizens-search-input">Search citizens</label>
@@ -46,7 +46,7 @@
 <td id="census-display-name-{{ citizen.uuid }}" class="table-cell identity-cell display-name-cell"><span id="census-display-name-value-{{ citizen.uuid }}" class="identity-value display-name-value">{{ citizen.display_name }}</span></td>
 <td id="census-discord-username-{{ citizen.uuid }}" class="table-cell social-cell discord-username-cell"><span id="census-discord-username-value-{{ citizen.uuid }}" class="social-value discord-username-value">{{ citizen.discord_username }}</span></td>
 <td id="census-reddit-username-{{ citizen.uuid }}" class="table-cell social-cell reddit-username-cell"><span id="census-reddit-username-value-{{ citizen.uuid }}" class="social-value reddit-username-value">{{ citizen.reddit_username }}</span></td>
-<td id="census-citizen-id-{{ citizen.uuid }}" class="table-cell editable-cell citizen-id-cell"><input id="census-citizen-id-input-{{ citizen.uuid }}" class="form-control table-control text-input citizen-id-input" type="password" name="citizen_id" value="" maxlength="100" autocomplete="new-password" placeholder="Set a new ID" form="census-citizen-form-{{ citizen.uuid }}"></td>
+<td id="census-citizen-id-{{ citizen.uuid }}" class="table-cell editable-cell citizen-id-cell"><input id="census-citizen-id-input-{{ citizen.uuid }}" class="form-control table-control text-input citizen-id-input" type="text" name="citizen_id" value="{{ citizen.citizen_id }}" maxlength="100" autocomplete="off" placeholder="Set an ID" form="census-citizen-form-{{ citizen.uuid }}"></td>
 <td id="census-status-{{ citizen.uuid }}" class="table-cell editable-cell census-status-cell"><select id="census-status-select-{{ citizen.uuid }}" class="form-control table-control select-control census-status-select" name="status" form="census-citizen-form-{{ citizen.uuid }}">
 <option value="filled_out"{% if citizen.status == "filled_out" %} selected{% endif %}>Filled out</option><option value="ineligible"{% if citizen.status == "ineligible" %} selected{% endif %}>Ineligible</option><option value="incorrect"{% if citizen.status == "incorrect" %} selected{% endif %}>Incorrect</option><option value="not_filled_out"{% if citizen.status == "not_filled_out" %} selected{% endif %}>Not filled out</option><option value="other"{% if citizen.status == "other" %} selected{% endif %}>Other</option><option value="to_be_set"{% if citizen.status == "to_be_set" %} selected{% endif %}>To be set</option>
 </select></td>

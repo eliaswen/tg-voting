@@ -189,6 +189,9 @@ async fn render_census(
                 let status: String = citizen.get("census_status");
                 rows.push(CensusCitizen {
                     uuid: citizen_uuid,
+                    citizen_id: citizen
+                        .get::<Option<String>, _>("citizen_id")
+                        .unwrap_or_default(),
                     oauth_username: display_value_raw(citizen.get("oauth_username")),
                     display_name: display_value_raw(citizen.get("display_name")),
                     discord_username: display_value_raw(citizen.get("discord_username")),
@@ -450,6 +453,7 @@ struct CensusDashboardPage<'a> {
 
 struct CensusCitizen {
     uuid: uuid::Uuid,
+    citizen_id: String,
     oauth_username: String,
     display_name: String,
     discord_username: String,
