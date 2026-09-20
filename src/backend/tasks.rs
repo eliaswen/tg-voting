@@ -57,7 +57,7 @@ async fn run_login_notifications(
 
 async fn run_election_snapshots(state: AppState) {
     loop {
-        match sqlx::query_scalar::<_, uuid::Uuid>("SELECT uuid FROM elections WHERE status = 'upcoming' AND eligibility_snapshotted_at IS NULL AND registration_starts_at <= CURRENT_TIMESTAMP").fetch_all(&state.pool).await {
+        match sqlx::query_scalar::<_, uuid::Uuid>("SELECT uuid FROM elections WHERE status = 'upcoming' AND eligibility_snapshot_enabled = TRUE AND eligibility_snapshotted_at IS NULL AND registration_starts_at <= CURRENT_TIMESTAMP").fetch_all(&state.pool).await {
             Ok(elections) => for election_uuid in elections { if crate::pages::voting::ensure_snapshot(&state, election_uuid).await.is_err() { error!(%election_uuid, "Failed to snapshot election eligibility"); } },
             Err(error) => error!(?error, "Failed to find elections requiring an eligibility snapshot"),
         }

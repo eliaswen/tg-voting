@@ -200,7 +200,7 @@ pub async fn get_candidate_registration(
             return response;
         }
     }
-    let eligible = sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM election_eligibility WHERE election_id = $1 AND citizen_id = $2)").bind(election_uuid).bind(citizen.uuid).fetch_one(&state.pool).await.unwrap_or(false);
+    let eligible = sqlx::query_scalar::<_, bool>("SELECT CASE WHEN eligibility_snapshot_enabled THEN EXISTS(SELECT 1 FROM election_eligibility WHERE election_id = elections.uuid AND citizen_id = $2) ELSE EXISTS(SELECT 1 FROM censuses JOIN census_entries ON census_entries.census_uuid = censuses.uuid WHERE censuses.active = TRUE AND census_entries.citizen_uuid = $2 AND census_entries.status = 'filled_out') END FROM elections WHERE uuid = $1").bind(election_uuid).bind(citizen.uuid).fetch_one(&state.pool).await.unwrap_or(false);
     if registration_open && !eligible && state.app_mode != 0 {
         return bad_request("You're not eligible to register for this election.");
     }
@@ -408,6 +408,13 @@ pub async fn post_candidate_registration(
         return bad_request(message);
     }
 
+    let debug_bypass = state.app_mode == 0 && form.debug_census;
+    if !debug_bypass {
+        if let Err(response) = crate::pages::voting::ensure_snapshot(&state, election_uuid).await {
+            return response;
+        }
+    }
+
     let mut transaction = match state.pool.begin().await {
         Ok(transaction) => {
             trace!(%election_uuid, citizen_id = citizen.id, "Started candidate registration transaction");
@@ -449,13 +456,7 @@ pub async fn post_candidate_registration(
         Ok(None) => {}
         Err(error) => return database_error(error),
     }
-    let debug_bypass = state.app_mode == 0 && form.debug_census;
-    if !debug_bypass {
-        if let Err(response) = crate::pages::voting::ensure_snapshot(&state, election_uuid).await {
-            return response;
-        }
-    }
-    let eligible = sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM election_eligibility WHERE election_id = $1 AND citizen_id = $2)").bind(election_uuid).bind(citizen.uuid).fetch_one(&mut *transaction).await.unwrap_or(false);
+    let eligible = sqlx::query_scalar::<_, bool>("SELECT CASE WHEN eligibility_snapshot_enabled THEN EXISTS(SELECT 1 FROM election_eligibility WHERE election_id = elections.uuid AND citizen_id = $2) ELSE EXISTS(SELECT 1 FROM censuses JOIN census_entries ON census_entries.census_uuid = censuses.uuid WHERE censuses.active = TRUE AND census_entries.citizen_uuid = $2 AND census_entries.status = 'filled_out') END FROM elections WHERE uuid = $1").bind(election_uuid).bind(citizen.uuid).fetch_one(&mut *transaction).await.unwrap_or(false);
     if !eligible && !debug_bypass {
         return bad_request("You're not eligible to register for this election.");
     }

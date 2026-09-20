@@ -4,6 +4,7 @@
 <h1 id="election-dashboard-title" class="page-title manage-title election-title">Season {{ season }}: {{ name }}</h1>
 <p>{{ description }}</p>
 <p>Election type: {{ election_type }}</p>
+<p>Eligibility source: {% if eligibility_snapshot_enabled %}census snapshot taken when registration opens{% else %}current census (live){% endif %}</p>
 <p id="election-dashboard-status" class="status-message election-status">Current status: <strong id="election-dashboard-status-value" class="status-value">{{ status }}</strong></p>
 <p id="election-dashboard-description" class="page-description manage-description">Use this dashboard to choose the part of the election you want to manage.</p>
 </header>

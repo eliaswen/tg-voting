@@ -19,6 +19,10 @@
 </p>
 <p class="form-field election-field"><label class="form-label" for="election-description-input">Description</label> <textarea id="election-description-input" class="form-control text-input" name="description" required>{{ form.description }}</textarea></p>
 <p class="form-field"><label for="election-type-input">Election type</label> <select id="election-type-input" name="election_type"><option value="general">General Election</option><option value="special">Special Election</option></select></p>
+<fieldset><legend>Eligibility source</legend>
+<label><input type="checkbox" name="eligibility_snapshot_enabled" value="true"{% if form.eligibility_snapshot_enabled %} checked{% endif %}> Freeze eligibility from the current census when registration opens</label>
+<p class="form-help">When disabled, the census currently in use remains the source of truth and eligibility changes take effect immediately.</p>
+</fieldset>
 <fieldset><legend>Applicable positions</legend>
 <label><input type="checkbox" name="president" value="president"{% if form.president.is_some() %} checked{% endif %}> President</label><br>
 <label><input type="checkbox" name="council" value="council"{% if form.council.is_some() %} checked{% endif %}> Council</label><br>

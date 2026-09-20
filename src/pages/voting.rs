@@ -118,7 +118,7 @@ pub async fn get_voter_code(
     if let Err(response) = ensure_snapshot(&state, election_uuid).await {
         return response;
     }
-    let issued = sqlx::query_scalar::<_, bool>("SELECT credential_issued FROM election_eligibility WHERE election_id = $1 AND citizen_id = $2")
+    let issued = sqlx::query_scalar::<_, bool>("SELECT election_eligibility.credential_issued FROM election_eligibility JOIN elections ON elections.uuid = election_eligibility.election_id WHERE election_eligibility.election_id = $1 AND election_eligibility.citizen_id = $2 AND (elections.eligibility_snapshot_enabled OR EXISTS (SELECT 1 FROM censuses JOIN census_entries ON census_entries.census_uuid = censuses.uuid WHERE censuses.active = TRUE AND census_entries.citizen_uuid = $2 AND census_entries.status = 'filled_out'))")
         .bind(election_uuid).bind(citizen.uuid).fetch_optional(&state.pool).await.ok().flatten().unwrap_or(false);
     render_template_page(
         &VoterCodePage {
@@ -195,7 +195,16 @@ pub async fn post_voter_code(
         Ok(Some(round)) if round == round_id(&election) => round,
         _ => return bad_request("Voter codes are not available at this stage."),
     };
-    let eligible = sqlx::query_scalar::<_, bool>("SELECT credential_issued FROM election_eligibility WHERE election_id = $1 AND citizen_id = $2 FOR UPDATE")
+    let snapshot_enabled = match sqlx::query_scalar::<_, bool>("SELECT eligibility_snapshot_enabled FROM elections WHERE uuid = $1")
+        .bind(election_uuid).fetch_one(&mut *transaction).await {
+        Ok(enabled) => enabled,
+        Err(error) => return database_error(error),
+    };
+    if !snapshot_enabled && !census_bypass {
+        if let Err(error) = sqlx::query("INSERT INTO election_eligibility (election_id, citizen_id) SELECT $1, $2 WHERE EXISTS (SELECT 1 FROM censuses JOIN census_entries ON census_entries.census_uuid = censuses.uuid WHERE censuses.active = TRUE AND census_entries.citizen_uuid = $2 AND census_entries.status = 'filled_out') ON CONFLICT DO NOTHING")
+            .bind(election_uuid).bind(citizen.uuid).execute(&mut *transaction).await { return database_error(error); }
+    }
+    let eligible = sqlx::query_scalar::<_, bool>("SELECT election_eligibility.credential_issued FROM election_eligibility JOIN elections ON elections.uuid = election_eligibility.election_id WHERE election_eligibility.election_id = $1 AND election_eligibility.citizen_id = $2 AND (elections.eligibility_snapshot_enabled OR EXISTS (SELECT 1 FROM censuses JOIN census_entries ON census_entries.census_uuid = censuses.uuid WHERE censuses.active = TRUE AND census_entries.citizen_uuid = $2 AND census_entries.status = 'filled_out')) FOR UPDATE OF election_eligibility")
         .bind(election_uuid).bind(citizen.uuid).fetch_optional(&mut *transaction).await;
     match eligible {
         Ok(Some(false)) => {}
@@ -633,7 +642,7 @@ fn code_requests_open(row: &sqlx::postgres::PgRow) -> bool {
 
 pub async fn ensure_snapshot(state: &AppState, election_uuid: uuid::Uuid) -> Result<(), Response> {
     let mut transaction = state.pool.begin().await.map_err(database_error)?;
-    let claimed = sqlx::query("UPDATE elections SET eligibility_snapshotted_at = CURRENT_TIMESTAMP WHERE uuid = $1 AND eligibility_snapshotted_at IS NULL RETURNING uuid")
+    let claimed = sqlx::query("UPDATE elections SET eligibility_snapshotted_at = CURRENT_TIMESTAMP WHERE uuid = $1 AND eligibility_snapshot_enabled = TRUE AND eligibility_snapshotted_at IS NULL RETURNING uuid")
         .bind(election_uuid).fetch_optional(&mut *transaction).await.map_err(database_error)?.is_some();
     if claimed {
         sqlx::query("INSERT INTO election_eligibility (election_id, citizen_id) SELECT $1, census_entries.citizen_uuid FROM censuses JOIN census_entries ON census_entries.census_uuid = censuses.uuid WHERE censuses.active = TRUE AND census_entries.status = 'filled_out'")

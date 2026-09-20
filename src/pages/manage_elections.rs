@@ -34,6 +34,8 @@ pub struct ElectionForm {
     voting_ends_at: String,
     council_seats: i32,
     #[serde(default)]
+    eligibility_snapshot_enabled: bool,
+    #[serde(default)]
     force_edit: bool,
 }
 
@@ -133,7 +135,7 @@ pub async fn get_manage_election(
                 voting_starts_at AS voting_start_raw, voting_ends_at AS voting_end_raw,
                 COALESCE(to_char(registration_starts_at AT TIME ZONE 'Europe/Paris', 'YYYY-MM-DD HH24:MI') || ' Europe/Paris', 'Not set') AS registration_starts_at,
                 COALESCE(to_char(registration_ends_at AT TIME ZONE 'Europe/Paris', 'YYYY-MM-DD HH24:MI') || ' Europe/Paris', 'Not set') AS registration_ends_at,
-                election_type::text AS election_type,
+                election_type::text AS election_type, eligibility_snapshot_enabled,
                 COALESCE(to_char(voting_starts_at AT TIME ZONE 'Europe/Paris', 'YYYY-MM-DD HH24:MI') || ' Europe/Paris', 'Not set') AS voting_starts_at,
                 COALESCE(to_char(voting_ends_at AT TIME ZONE 'Europe/Paris', 'YYYY-MM-DD HH24:MI') || ' Europe/Paris', 'Not set') AS voting_ends_at
          FROM elections WHERE uuid = $1".replace("Europe/Paris", &timezone);
@@ -167,6 +169,7 @@ pub async fn get_manage_election(
         name: election.get("name"),
         description: election.get("description"),
         election_type: election.get("election_type"),
+        eligibility_snapshot_enabled: election.get("eligibility_snapshot_enabled"),
         status: effective.stage_label,
         registration_starts_at: election.get("registration_starts_at"),
         registration_ends_at: election.get("registration_ends_at"),
@@ -205,11 +208,11 @@ pub async fn post_manage_elections(
     let create_query = "INSERT INTO elections (
             season, name, description, election_type,
             registration_starts_at, registration_ends_at,
-            voting_starts_at, voting_ends_at, council_seats
+            voting_starts_at, voting_ends_at, council_seats, eligibility_snapshot_enabled
         ) VALUES (
             $1, $2, $3, $4::election_type,
             NULLIF($5, '')::timestamp AT TIME ZONE 'Europe/Paris', NULLIF($6, '')::timestamp AT TIME ZONE 'Europe/Paris',
-            NULLIF($7, '')::timestamp AT TIME ZONE 'Europe/Paris', NULLIF($8, '')::timestamp AT TIME ZONE 'Europe/Paris', $9
+            NULLIF($7, '')::timestamp AT TIME ZONE 'Europe/Paris', NULLIF($8, '')::timestamp AT TIME ZONE 'Europe/Paris', $9, $10
         ) RETURNING uuid".replace("Europe/Paris", &timezone);
     let query = sqlx::query_scalar::<_, uuid::Uuid>(sqlx::AssertSqlSafe(create_query.as_str()))
         .bind(form.season)
@@ -221,6 +224,7 @@ pub async fn post_manage_elections(
         .bind(&form.voting_starts_at)
         .bind(&form.voting_ends_at)
         .bind(form.council_seats)
+        .bind(form.eligibility_snapshot_enabled)
         .fetch_one(&mut *transaction)
         .await;
 
@@ -262,7 +266,7 @@ pub async fn get_edit_election(
                 election_type::text AS election_type, status::text AS status,
                 to_char(voting_starts_at AT TIME ZONE 'Europe/Paris', 'YYYY-MM-DD\"T\"HH24:MI') AS voting_starts_at,
                 to_char(voting_ends_at AT TIME ZONE 'Europe/Paris', 'YYYY-MM-DD\"T\"HH24:MI') AS voting_ends_at,
-                council_seats
+                council_seats, eligibility_snapshot_enabled
          FROM elections
          WHERE uuid = $1".replace("Europe/Paris", &timezone);
     let election = sqlx::query(sqlx::AssertSqlSafe(edit_query.as_str()))
@@ -304,6 +308,7 @@ pub async fn get_edit_election(
                     .get::<Option<String>, _>("voting_ends_at")
                     .unwrap_or_default(),
                 council_seats: election.get("council_seats"),
+                eligibility_snapshot_enabled: election.get("eligibility_snapshot_enabled"),
                 force_edit: false,
             }
         }
@@ -365,8 +370,9 @@ pub async fn post_edit_election(
             registration_ends_at = NULLIF($6, '')::timestamp AT TIME ZONE 'Europe/Paris',
             voting_starts_at = NULLIF($7, '')::timestamp AT TIME ZONE 'Europe/Paris',
             voting_ends_at = NULLIF($8, '')::timestamp AT TIME ZONE 'Europe/Paris',
-            council_seats = $9
-         WHERE uuid = $10"
+            council_seats = $9,
+            eligibility_snapshot_enabled = $10
+         WHERE uuid = $11"
         .replace("Europe/Paris", &timezone);
     let query = sqlx::query(sqlx::AssertSqlSafe(update_query.as_str()))
         .bind(form.season)
@@ -378,6 +384,7 @@ pub async fn post_edit_election(
         .bind(&form.voting_starts_at)
         .bind(&form.voting_ends_at)
         .bind(form.council_seats)
+        .bind(form.eligibility_snapshot_enabled)
         .bind(election_uuid)
         .execute(&mut *transaction)
         .await;
@@ -479,6 +486,7 @@ impl Default for ElectionForm {
             voting_starts_at: String::new(),
             voting_ends_at: String::new(),
             council_seats: 10,
+            eligibility_snapshot_enabled: true,
             force_edit: false,
         }
     }
@@ -545,6 +553,7 @@ struct ElectionDashboardPage {
     name: String,
     description: String,
     election_type: String,
+    eligibility_snapshot_enabled: bool,
     status: String,
     registration_starts_at: String,
     registration_ends_at: String,
@@ -615,6 +624,7 @@ mod tests {
             voting_starts_at: "2026-01-05T09:00".to_string(),
             voting_ends_at: "2026-01-06T09:00".to_string(),
             council_seats: 10,
+            eligibility_snapshot_enabled: true,
             force_edit: false,
         }
     }
