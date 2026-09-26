@@ -99,7 +99,7 @@ jobs:
           sarif = {'version': '2.1.0', '$schema': 'https://json.schemastore.org/sarif-2.1.0.json', 'runs': [{'tool': {'driver': {'name': 'OWASP ZAP'}}, 'results': results}]}
           Path('zap-reports/zap.sarif').write_text(json.dumps(sarif))
           PY
-      - uses: github/codeql-action/upload-sarif@7c9a7896f03bb1f3de14c5663ed46759e27443e0 # v4.31.9
+      - uses: github/codeql-action/upload-sarif@5d4e8d1aca955e8d8589aabd499c5cae939e33c7 # v4.31.9
         if: always()
         with:
           sarif_file: zap-reports/zap.sarif
